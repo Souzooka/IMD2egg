@@ -13,7 +13,7 @@ class IMD:
 
         imd = cls()
         imd.header = IMDHeader.from_file(f)
-        f.seek(imd.header.p_objects)
+        #f.seek(imd.header.p_objects)
 
         f.seek(pos)
         
@@ -38,14 +38,8 @@ class IMDHeader:
     #unk18: int
     # 1C: always seems to be 0
     #unk1C: int
-    # 20: void*; the offset for the end of the header; always seems to be 0x30. Points to first IMD object.
-    p_objects: int
-    # 24: always seems to be 0
-    #unk24: int
-    # 28: always seems to be 0
-    #unk28: int
-    # 2C: always seems to be 0
-    #unk2C: int
+    # 20: void*[]; this points to every object within the file
+    p_objects: list[int]
 
     @classmethod
     def from_file(cls, f: BinaryIO):
@@ -69,7 +63,7 @@ class IMDHeader:
         #header.unk1C = struct.unpack("<I", f.read(4))[0]
 
         f.seek(pos + 0x20)
-        header.p_objects = struct.unpack("<I", f.read(4))[0]
+        header.p_objects = list(struct.unpack(f"<{header.n_objects}I", f.read(4)))
         #header.unk24 = struct.unpack("<I", f.read(4))[0]
         #header.unk28 = struct.unpack("<I", f.read(4))[0]
         #header.unk2C = struct.unpack("<I", f.read(4))[0]
