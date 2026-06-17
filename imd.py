@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import struct
-from typing import BinaryIO
+from typing import BinaryIO, ClassVar
+
+from util import Color4, Vec4
 
 class IMD:
     header: IMDHeader
     objects: list[IMDObj]
+    # UP = -y
+    UP: ClassVar[int] = -1
 
     @classmethod
     def from_file(cls, f: BinaryIO):
@@ -134,13 +138,13 @@ class IMDPrim:
             case 0x01:
                 prim_cls = IMDPrimGroup
             case 0x10:
-                prim_cls = IMDPrim0x10
+                prim_cls = IMDPrimTransformState
             case 0x13:
                 prim_cls = IMDPrim0x13
             case 0x20:
                 prim_cls = IMDPrim0x20
             case 0x21:
-                prim_cls = IMDPrim0x21
+                prim_cls = IMDPrimTexture
             case 0x48:
                 prim_cls = IMDPrim0x48
             case _:
@@ -188,18 +192,58 @@ class IMDPrimGroup(IMDPrim):
 
         return prim
 
-class IMDPrim0x10(IMDPrim):
+class IMDPrimTransformState(IMDPrim):
+    # type = 0x10
+    # size = 0x70
+    # Represents the transform state
+    # (of some data within the model? Of the group containing this?)
+    # and the relation between this node and others within the model
+    # 8 - unknown int
+    # C - unknown short
+    # E - unknown short
+    # 10
+    orientation: Vec4
+    # 20
+    position: Vec4
+    # 30
+    scale: Vec4
+    # 40 - unknown vec4
+    # 50 - unknown vec4
+    # 60 - the index of this node
+    node_index: int
+    # 64 - the index of the parent node (-1 indicates no parent)
+    # Transformations are applied relative to the parent
+    parent_node_index: int
+
     @classmethod
     def from_file(cls, f: BinaryIO):
         pos = f.tell()
 
         prim = cls()
+
+        f.seek(pos + 0x10)
+        prim.orientation = Vec4(*struct.unpack("<4f", f.read(4*4)))
+
+        f.seek(pos + 0x20)
+        prim.position = Vec4(*struct.unpack("<4f", f.read(4*4)))
+
+        f.seek(pos + 0x30)
+        prim.scale = Vec4(*struct.unpack("<4f", f.read(4*4)))
+
+        f.seek(pos + 0x60)
+        prim.node_index = struct.unpack("<i", f.read(4))[0]
+
+        f.seek(pos + 0x64)
+        prim.parent_node_index = struct.unpack("<i", f.read(4))[0]
         
         f.seek(pos)
 
         return prim
 
 class IMDPrim0x13(IMDPrim):
+    # type = 0x13
+    # size = 0x90
+
     @classmethod
     def from_file(cls, f: BinaryIO):
         pos = f.tell()
@@ -211,22 +255,43 @@ class IMDPrim0x13(IMDPrim):
         return prim
 
 class IMDPrim0x20(IMDPrim):
+    # type = 0x20
+    # size = 0x50
+    # 20; vertex color scale?
+    color_scale: Color4
     @classmethod
     def from_file(cls, f: BinaryIO):
         pos = f.tell()
 
         prim = cls()
+
+        f.seek(pos + 0x20)
+        prim.color_scale = Color4(*struct.unpack("<4f", f.read(4*4)))
         
         f.seek(pos)
 
         return prim
     
-class IMDPrim0x21(IMDPrim):
+class IMDPrimTexture(IMDPrim):
+    # type = 0x21
+    # size = 0x60
+    # texture?
+    # 10; texture ID
+    texture_id: int
+    # 20; vec4f; color scale for this texture [0..128f]
+    color_scale: Color4
+
     @classmethod
     def from_file(cls, f: BinaryIO):
         pos = f.tell()
 
         prim = cls()
+
+        f.seek(pos + 0x10)
+        prim.texture_id = struct.unpack("<I", f.read(4))[0]
+
+        f.seek(pos + 0x20)
+        prim.color_scale = Color4(*struct.unpack("<4f", f.read(4*4)))
         
         f.seek(pos)
 
@@ -234,11 +299,60 @@ class IMDPrim0x21(IMDPrim):
 
 class IMDPrim0x48(IMDPrim):
     # UV + vertex data?
+    # E; number of vertices
+    # 60; the vertex data
+    vertices: list[Vertex]
+
+    class Vertex:
+        # size = 0x18
+        # OK, so here we seem to have the position of each vertex,
+        # some unknown info,
+        # a divisor value to convert shorts into floats,
+        # some unknown info, and some UV info?
+        # 0
+        position: Vec4
+        @classmethod
+        def from_file(cls, f: BinaryIO):
+            pos = f.tell()
+
+            vertex = cls()
+
+            f.seek(pos + 0xE)
+            divisor = struct.unpack("<h", f.read(2))[0]
+            if divisor == 0:
+                pass
+
+            f.seek(pos + 0x0)
+            vertex.position = Vec4(*(c / divisor for c in struct.unpack("<3h", f.read(2*3))))
+
+            f.seek(pos)
+            return vertex
+
     @classmethod
     def from_file(cls, f: BinaryIO):
         pos = f.tell()
 
         prim = cls()
+
+        f.seek(pos + 0xE)
+        num_vertices = struct.unpack("<H", f.read(2))[0]
+
+        prim.vertices = []
+        for i in range(num_vertices):
+            vertex_pos = pos + 0x60 + (i * 0x18)
+            f.seek(vertex_pos)
+
+            # TODO: Models can seem to have breaks in their vertices list,
+            # indicated by a 0x17 0xF bytes away from the last vertex.
+            # How to handle this is unknown...
+            # This might be to indicate two parts of the model which
+            # don't have any vertices connecting them, perhaps?
+            f.seek(vertex_pos + 0xF)
+            if struct.unpack("<B", f.read(1))[0] == 0x17:
+                raise RuntimeError(f"Found break in vertex list at {hex(vertex_pos)}; handling unimplemented.")
+            f.seek(vertex_pos)
+
+            prim.vertices.append(IMDPrim0x48.Vertex.from_file(f))
         
         f.seek(pos)
 

@@ -12,5 +12,6 @@ except OSError:
     sys.exit(1)
 
 imd = IMD.from_file(imd_file)
+imd_file.close()
 
 pass
