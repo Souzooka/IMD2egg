@@ -5,6 +5,7 @@ from typing import BinaryIO
 
 class IMD:
     header: IMDHeader
+    objects: list[IMDObj]
 
     @classmethod
     def from_file(cls, f: BinaryIO):
@@ -13,7 +14,11 @@ class IMD:
 
         imd = cls()
         imd.header = IMDHeader.from_file(f)
-        #f.seek(imd.header.p_objects)
+
+        imd.objects = []
+        for ptr in imd.header.p_objects:
+            f.seek(ptr)
+            imd.objects.append(IMDObj.from_file(f))
 
         f.seek(pos)
         
@@ -71,3 +76,170 @@ class IMDHeader:
         f.seek(pos)
         
         return header
+
+class IMDObj:
+    type: int
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+        obj_type: int = struct.unpack("<I", f.read(4))[0]
+        
+        obj_cls = None
+        match obj_type:
+            case 0x10:
+                obj_cls = IMDObj0x10
+            case _:
+                raise RuntimeError(f"Unrecognized IMD Obj type {hex(obj_type)}")
+
+        f.seek(pos)
+        obj = obj_cls.from_file(f)
+        f.seek(pos)
+        return obj
+
+class IMDObj0x10(IMDObj):
+    # B0; null-terminated void*[]
+    prims: list[IMDPrim]
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        obj = cls()
+
+        f.seek(pos + 0xB0)
+        p_prims: list[int] = []
+        while (ptr := struct.unpack("<I", f.read(4))[0]) != 0:
+            p_prims.append(ptr)
+
+        obj.prims = []
+        for ptr in p_prims:
+            f.seek(ptr)
+            obj.prims.append(IMDPrim.from_file(f))
+        f.seek(pos)
+
+        return obj
+
+
+class IMDPrim:
+    type: int
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+        prim_type: int = struct.unpack("<I", f.read(4))[0]
+        
+        prim_cls = None
+        match prim_type:
+            case 0x01:
+                prim_cls = IMDPrimGroup
+            case 0x10:
+                prim_cls = IMDPrim0x10
+            case 0x13:
+                prim_cls = IMDPrim0x13
+            case 0x20:
+                prim_cls = IMDPrim0x20
+            case 0x21:
+                prim_cls = IMDPrim0x21
+            case 0x48:
+                prim_cls = IMDPrim0x48
+            case _:
+                raise RuntimeError(f"Unrecognized IMD Prim type {hex(prim_type)}")
+
+        f.seek(pos)
+        prim = prim_cls.from_file(f)
+        prim.type = prim_type
+        f.seek(pos)
+        return prim
+
+class IMDPrimGroup(IMDPrim):
+    # type 0x1
+    # Seems to just be a list of primitives;
+    # perhaps some sort of grouping.
+    # 8; some sort of bitmask
+    unk8: int 
+    # C; some sort of bitmask (similar to 8)
+    unkC: int
+    # 10; null-terminated prim*[]
+    prims: list[IMDPrim]
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        prim = cls()
+
+        f.seek(pos + 0x8)
+        prim.unk8 = struct.unpack("<I", f.read(4))[0]
+        f.seek(pos + 0xC)
+        prim.unkC = struct.unpack("<I", f.read(4))[0]
+
+        f.seek(pos + 0x10)
+        p_prims: list[int] = []
+        while (ptr := struct.unpack("<I", f.read(4))[0]) != 0:
+            p_prims.append(ptr)
+
+        prim.prims = []
+        for ptr in p_prims:
+            f.seek(ptr)
+            prim.prims.append(IMDPrim.from_file(f))
+        
+        f.seek(pos)
+
+        return prim
+
+class IMDPrim0x10(IMDPrim):
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        prim = cls()
+        
+        f.seek(pos)
+
+        return prim
+
+class IMDPrim0x13(IMDPrim):
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        prim = cls()
+        
+        f.seek(pos)
+
+        return prim
+
+class IMDPrim0x20(IMDPrim):
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        prim = cls()
+        
+        f.seek(pos)
+
+        return prim
+    
+class IMDPrim0x21(IMDPrim):
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        prim = cls()
+        
+        f.seek(pos)
+
+        return prim
+
+class IMDPrim0x48(IMDPrim):
+    # UV + vertex data?
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        prim = cls()
+        
+        f.seek(pos)
+
+        return prim
