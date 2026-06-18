@@ -169,6 +169,8 @@ class IMDPrim:
         match prim_type:
             case 0x01:
                 prim_cls = IMDPrimGroup
+            case 0x02:
+                prim_cls = IMDPrim0x2
             case 0x10:
                 prim_cls = IMDPrimTransformState
             case 0x13:
@@ -228,6 +230,19 @@ class IMDPrimGroup(IMDPrim):
     
     def get_prims(self) -> Sequence[IMDPrim]:
         return self.prims
+    
+class IMDPrim0x2(IMDPrim):
+    type: ClassVar[int] = 0x2
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        prim = cls()
+        
+        f.seek(pos)
+
+        return prim
 
 class IMDPrimTransformState(IMDPrim):
     type: ClassVar[int] = 0x10
@@ -361,13 +376,14 @@ class IMDPrimVertexPool(IMDPrim):
 
             f.seek(pos + 0xE)
             # TODO: Some sort of scale value, guessing at this
-            scale = struct.unpack("<h", f.read(2))[0] / 0x1000
+            #scale = struct.unpack("<h", f.read(2))[0] / 0x1000
 
             f.seek(pos + 0x0)
-            vertex.position = Vec4(*(c * scale for c in struct.unpack("<3h", f.read(2*3))))
+            # NOTE: This scale is just arbitrary
+            vertex.position = Vec4(*(c / 0x40 for c in struct.unpack("<3h", f.read(2*3))))
 
             f.seek(pos + 0x10)
-            vertex.u = 1.0 - struct.unpack("<h", f.read(2))[0] / 0x1000
+            vertex.u = struct.unpack("<h", f.read(2))[0] / 0x1000
             vertex.v = 1.0 - struct.unpack("<h", f.read(2))[0] / 0x1000
 
             f.seek(pos)

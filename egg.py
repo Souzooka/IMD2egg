@@ -61,9 +61,11 @@ class Egg:
         indent += INDENT_AMOUNT
         
         # I guess we'll just assume there's a vertex pool and write it for now
+        vp_id = 0
         for prim in group.get_prims():
             if isinstance(prim, IMDPrimVertexPool):
-                Egg._write_vertex_pool(output_file, prim, f"{group_name}.verts", texture_id, indent)
+                Egg._write_vertex_pool(output_file, prim, f"{group_name}.verts{vp_id}", texture_id, indent)
+                vp_id += 1
 
         indent -= INDENT_AMOUNT
         Egg._write_with_indent(output_file, "}\n", indent)
@@ -103,7 +105,7 @@ class Egg:
         vec = copy.copy(vec)
         match COORDINATE_SYSTEM:
             case "Z-up":
-                vec.x, vec.y, vec.z = vec.x, -vec.z, -vec.y
+                vec.x, vec.y, vec.z = -vec.x, -vec.z, -vec.y
             case _:
                 raise RuntimeError("Unsupported .egg coordinate system")
         return vec
