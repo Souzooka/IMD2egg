@@ -48,6 +48,12 @@ class IMD:
         result = self.__get_all_prims_of_type(IMDPrimTexture.type)
         return cast("Sequence[IMDPrimTexture]", result)
     
+    def get_all_groups(self) -> Sequence[IMDPrimGroup]:
+        # TODO: this doesn't respect nesting -- but maybe we could just arrange a
+        # dict of {parent: children} here if all groups have a transform state with a parent node ID?
+        result = self.__get_all_prims_of_type(IMDPrimGroup.type)
+        return cast("Sequence[IMDPrimGroup]", result)
+    
 class IMDHeader:
     # bytes 0:3 should be "IMD "
     _magic: str
@@ -350,13 +356,24 @@ class IMDPrimVertexPool(IMDPrim):
             vertex = cls()
 
             f.seek(pos + 0xE)
-            divisor = struct.unpack("<h", f.read(2))[0]
+            # TODO: Some sort of scale value, guessing at this
+            scale = struct.unpack("<h", f.read(2))[0] / 0x1000
 
             f.seek(pos + 0x0)
-            vertex.position = Vec4(*(c / divisor for c in struct.unpack("<3h", f.read(2*3))))
+            vertex.position = Vec4(*(c * scale for c in struct.unpack("<3h", f.read(2*3))))
 
             f.seek(pos)
             return vertex
+        
+        @property
+        def x(self):
+            return self.position.x
+        @property
+        def y(self):
+            return self.position.y
+        @property
+        def z(self):
+            return self.position.z
 
     @classmethod
     def from_file(cls, f: BinaryIO):
