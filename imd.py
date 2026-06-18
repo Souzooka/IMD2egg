@@ -349,6 +349,10 @@ class IMDPrimVertexPool(IMDPrim):
         # some unknown info, and some UV info?
         # 0
         position: Vec4
+        # 10 (short)
+        u: float
+        # 12 (short)
+        v: float
         @classmethod
         def from_file(cls, f: BinaryIO):
             pos = f.tell()
@@ -361,6 +365,10 @@ class IMDPrimVertexPool(IMDPrim):
 
             f.seek(pos + 0x0)
             vertex.position = Vec4(*(c * scale for c in struct.unpack("<3h", f.read(2*3))))
+
+            f.seek(pos + 0x10)
+            vertex.u = struct.unpack("<h", f.read(2))[0] / 0x1000
+            vertex.v = struct.unpack("<h", f.read(2))[0] / 0x1000
 
             f.seek(pos)
             return vertex

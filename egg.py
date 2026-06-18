@@ -74,9 +74,10 @@ class Egg:
         indent += INDENT_AMOUNT
 
         for i, vertex in enumerate(vertex_pool.vertices):
-            Egg._write_with_indent(output_file, f"<Vertex> {i} {{ {vertex.x} {vertex.y} {vertex.z}\n", indent)
+            vec = Egg._convert_imd_coordinates(vertex.position)
+            Egg._write_with_indent(output_file, f"<Vertex> {i} {{ {vec.x} {vec.y} {vec.z}\n", indent)
             indent += INDENT_AMOUNT
-            # TODO scalars etc. uv
+            Egg._write_with_indent(output_file, f"<UV> {{ {vertex.u} {vertex.v} }}\n", indent)
             indent -= INDENT_AMOUNT
             Egg._write_with_indent(output_file, "}\n", indent)
         indent -= INDENT_AMOUNT
@@ -89,7 +90,10 @@ class Egg:
             Egg._write_with_indent(output_file, f"<TRef> {{ {texture_id} }}\n", indent)
             Egg._write_with_indent(output_file, f"<RGBA> {{ 1.0 1.0 1.0 1.0 }}\n", indent)
             Egg._write_with_indent(output_file, f"<BFace> {{ 0 }}\n", indent)
-            Egg._write_with_indent(output_file, f"<VertexRef> {{ {i+2} {i+1} {i+0} <Ref> {{ {pool_name} }} }}\n", indent)
+            if i & 1 == 0:
+                Egg._write_with_indent(output_file, f"<VertexRef> {{ {i+2} {i+1} {i+0} <Ref> {{ {pool_name} }} }}\n", indent)
+            else:
+                Egg._write_with_indent(output_file, f"<VertexRef> {{ {i+0} {i+1} {i+2} <Ref> {{ {pool_name} }} }}\n", indent)
             indent -= INDENT_AMOUNT
             Egg._write_with_indent(output_file, "}\n", indent)
         indent -= INDENT_AMOUNT
