@@ -367,8 +367,8 @@ class IMDPrimVertexPool(IMDPrim):
             vertex.position = Vec4(*(c * scale for c in struct.unpack("<3h", f.read(2*3))))
 
             f.seek(pos + 0x10)
-            vertex.u = struct.unpack("<h", f.read(2))[0] / 0x1000
-            vertex.v = struct.unpack("<h", f.read(2))[0] / 0x1000
+            vertex.u = 1.0 - struct.unpack("<h", f.read(2))[0] / 0x1000
+            vertex.v = 1.0 - struct.unpack("<h", f.read(2))[0] / 0x1000
 
             f.seek(pos)
             return vertex

@@ -84,16 +84,15 @@ class Egg:
         Egg._write_with_indent(output_file, "}\n", indent)
 
         # TODO: How do these vertices connect together...?
+        # NOTE: These are probably always triangle strips...
         for i in range(0, len(vertex_pool.vertices)-2):
             Egg._write_with_indent(output_file, f"<Polygon> {{\n", indent)
             indent += INDENT_AMOUNT
             Egg._write_with_indent(output_file, f"<TRef> {{ {texture_id} }}\n", indent)
             Egg._write_with_indent(output_file, f"<RGBA> {{ 1.0 1.0 1.0 1.0 }}\n", indent)
             Egg._write_with_indent(output_file, f"<BFace> {{ 0 }}\n", indent)
-            if i & 1 == 0:
-                Egg._write_with_indent(output_file, f"<VertexRef> {{ {i+2} {i+1} {i+0} <Ref> {{ {pool_name} }} }}\n", indent)
-            else:
-                Egg._write_with_indent(output_file, f"<VertexRef> {{ {i+0} {i+1} {i+2} <Ref> {{ {pool_name} }} }}\n", indent)
+            # Jank code to try and get more faces properly facing forward
+            Egg._write_with_indent(output_file, f"<VertexRef> {{ {i+0} {i+1} {i+2} <Ref> {{ {pool_name} }} }}\n", indent)
             indent -= INDENT_AMOUNT
             Egg._write_with_indent(output_file, "}\n", indent)
         indent -= INDENT_AMOUNT
@@ -104,7 +103,7 @@ class Egg:
         vec = copy.copy(vec)
         match COORDINATE_SYSTEM:
             case "Z-up":
-                vec.y, vec.z = vec.z, -vec.y
+                vec.x, vec.y, vec.z = vec.x, -vec.z, -vec.y
             case _:
                 raise RuntimeError("Unsupported .egg coordinate system")
         return vec
