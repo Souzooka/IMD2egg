@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import struct
-from typing import BinaryIO, ClassVar
+from typing import BinaryIO, ClassVar, Sequence, cast
 
 from util import Color4, Vec4
 
@@ -27,6 +27,26 @@ class IMD:
         f.seek(pos)
         
         return imd
+    
+    def __get_all_prims_of_type(self, prim_type: int) -> Sequence[IMDPrim]:
+        prims: list[IMDPrim] = []
+
+        for obj in self.objects:
+            obj_prims = obj.get_prims()
+            for prim in obj_prims:
+                if prim.type == prim_type:
+                    prims.append(prim)
+
+                prim_prims = prim.get_prims()
+                for prim in prim_prims:
+                    if prim.type == prim_type:
+                        prims.append(prim)
+        
+        return prims
+
+    def get_all_textures(self) -> Sequence[IMDPrimTexture]:
+        result = self.__get_all_prims_of_type(IMDPrimTexture.type)
+        return cast("Sequence[IMDPrimTexture]", result)
     
 class IMDHeader:
     # bytes 0:3 should be "IMD "
@@ -82,7 +102,7 @@ class IMDHeader:
         return header
 
 class IMDObj:
-    type: int
+    type: ClassVar[int] = 0
 
     @classmethod
     def from_file(cls, f: BinaryIO):
@@ -100,8 +120,12 @@ class IMDObj:
         obj = obj_cls.from_file(f)
         f.seek(pos)
         return obj
+    
+    def get_prims(self) -> list[IMDPrim]:
+        return []
 
 class IMDObj0x10(IMDObj):
+    type: ClassVar[int] = 0x10
     # B0; null-terminated void*[]
     prims: list[IMDPrim]
 
@@ -123,10 +147,12 @@ class IMDObj0x10(IMDObj):
         f.seek(pos)
 
         return obj
-
+    
+    def get_prims(self) -> list[IMDPrim]:
+        return self.prims
 
 class IMDPrim:
-    type: int
+    type: ClassVar[int] = 0
 
     @classmethod
     def from_file(cls, f: BinaryIO):
@@ -146,18 +172,20 @@ class IMDPrim:
             case 0x21:
                 prim_cls = IMDPrimTexture
             case 0x48:
-                prim_cls = IMDPrim0x48
+                prim_cls = IMDPrimVertexPool
             case _:
                 raise RuntimeError(f"Unrecognized IMD Prim type {hex(prim_type)}")
 
         f.seek(pos)
         prim = prim_cls.from_file(f)
-        prim.type = prim_type
         f.seek(pos)
         return prim
+    
+    def get_prims(self) -> Sequence[IMDPrim]:
+        return []
 
 class IMDPrimGroup(IMDPrim):
-    # type 0x1
+    type: ClassVar[int] = 1
     # Seems to just be a list of primitives;
     # perhaps some sort of grouping.
     # 8; some sort of bitmask
@@ -191,9 +219,12 @@ class IMDPrimGroup(IMDPrim):
         f.seek(pos)
 
         return prim
+    
+    def get_prims(self) -> Sequence[IMDPrim]:
+        return self.prims
 
 class IMDPrimTransformState(IMDPrim):
-    # type = 0x10
+    type: ClassVar[int] = 0x10
     # size = 0x70
     # Represents the transform state
     # (of some data within the model? Of the group containing this?)
@@ -241,7 +272,7 @@ class IMDPrimTransformState(IMDPrim):
         return prim
 
 class IMDPrim0x13(IMDPrim):
-    # type = 0x13
+    type: ClassVar[int] = 0x13
     # size = 0x90
 
     @classmethod
@@ -255,7 +286,7 @@ class IMDPrim0x13(IMDPrim):
         return prim
 
 class IMDPrim0x20(IMDPrim):
-    # type = 0x20
+    type: ClassVar[int] = 0x20
     # size = 0x50
     # 20; vertex color scale?
     color_scale: Color4
@@ -273,7 +304,7 @@ class IMDPrim0x20(IMDPrim):
         return prim
     
 class IMDPrimTexture(IMDPrim):
-    # type = 0x21
+    type: ClassVar[int] = 0x21
     # size = 0x60
     # texture?
     # 10; texture ID
@@ -297,7 +328,8 @@ class IMDPrimTexture(IMDPrim):
 
         return prim
 
-class IMDPrim0x48(IMDPrim):
+class IMDPrimVertexPool(IMDPrim):
+    type: ClassVar[int] = 0x48
     # UV + vertex data?
     # E; number of vertices
     # 60; the vertex data
@@ -319,8 +351,6 @@ class IMDPrim0x48(IMDPrim):
 
             f.seek(pos + 0xE)
             divisor = struct.unpack("<h", f.read(2))[0]
-            if divisor == 0:
-                pass
 
             f.seek(pos + 0x0)
             vertex.position = Vec4(*(c / divisor for c in struct.unpack("<3h", f.read(2*3))))
@@ -352,7 +382,7 @@ class IMDPrim0x48(IMDPrim):
                 raise RuntimeError(f"Found break in vertex list at {hex(vertex_pos)}; handling unimplemented.")
             f.seek(vertex_pos)
 
-            prim.vertices.append(IMDPrim0x48.Vertex.from_file(f))
+            prim.vertices.append(IMDPrimVertexPool.Vertex.from_file(f))
         
         f.seek(pos)
 

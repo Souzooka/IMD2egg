@@ -3,3 +3,5 @@
 *.pyc
 *.imd
 *.egg
+*.tm2
+*.png

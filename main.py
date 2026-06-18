@@ -1,5 +1,6 @@
 import sys
 
+from egg import Egg
 from imd import IMD
 
 file_path = "TEST.IMD"
@@ -13,5 +14,9 @@ except OSError:
 
 imd = IMD.from_file(imd_file)
 imd_file.close()
+
+egg_file = open("TEST.egg", "wt")
+Egg.from_imd(imd, egg_file)
+egg_file.close()
 
 pass
