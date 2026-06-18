@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import copy
-from typing import TextIO
+from typing import TextIO, cast
 
-from imd import IMD, IMDPrimGroup, IMDPrimTexture, IMDPrimVertexPool
+from imd import IMD, IMDPrimGroup, IMDPrimTexture, IMDPrimVertexPool, IMDPrimVertexColor
 from util import Vec4
 
 # Various constants yadayada
@@ -62,16 +62,24 @@ class Egg:
         
         # I guess we'll just assume there's a vertex pool and write it for now
         vp_id = 0
-        for prim in group.get_prims():
+        for i, prim in enumerate((prims := group.get_prims())):
             if isinstance(prim, IMDPrimVertexPool):
-                Egg._write_vertex_pool(output_file, prim, f"{group_name}.verts{vp_id}", texture_id, indent)
+                # FIXME jank -- have to refactor this when IMD is better understood
+                # What the model is probably doing is reading primitives in order
+                # and just configuring various settings, before it gets to a particular vertex
+                # pool -- in that sense what we should really be doing in this function is
+                # just interpreting the primitives in order.
+                vertex_color_info = None
+                if i != 0 and isinstance(prims[i-1], IMDPrimVertexColor):
+                    vertex_color_info = cast("IMDPrimVertexColor", prims[i-1])
+                Egg._write_vertex_pool(output_file, prim, f"{group_name}.verts{vp_id}", texture_id, vertex_color_info, indent)
                 vp_id += 1
 
         indent -= INDENT_AMOUNT
         Egg._write_with_indent(output_file, "}\n", indent)
 
     @staticmethod
-    def _write_vertex_pool(output_file: TextIO, vertex_pool: IMDPrimVertexPool, pool_name: str, texture_id: int, indent: int = 0):
+    def _write_vertex_pool(output_file: TextIO, vertex_pool: IMDPrimVertexPool, pool_name: str, texture_id: int, vertex_color_info: IMDPrimVertexColor | None, indent: int = 0):
         Egg._write_with_indent(output_file, f"<VertexPool> {pool_name} {{\n", indent)
         indent += INDENT_AMOUNT
 
@@ -87,13 +95,17 @@ class Egg:
 
         # TODO: How do these vertices connect together...?
         # NOTE: These are probably always triangle strips...
+        r, g, b, a = 1.0, 1.0, 1.0, 1.0
+        if vertex_color_info is not None:
+            color = vertex_color_info.color_scale
+            r, g, b, a = color.r, color.g, color.b, color.a
         for i in range(0, len(vertex_pool.vertices)-2):
             Egg._write_with_indent(output_file, f"<Polygon> {{\n", indent)
             indent += INDENT_AMOUNT
-            Egg._write_with_indent(output_file, f"<TRef> {{ {texture_id} }}\n", indent)
-            Egg._write_with_indent(output_file, f"<RGBA> {{ 1.0 1.0 1.0 1.0 }}\n", indent)
+            if texture_id != 0:
+                Egg._write_with_indent(output_file, f"<TRef> {{ {texture_id} }}\n", indent)
+            Egg._write_with_indent(output_file, f"<RGBA> {{ {r} {g} {b} {a} }}\n", indent)
             Egg._write_with_indent(output_file, f"<BFace> {{ 0 }}\n", indent)
-            # Jank code to try and get more faces properly facing forward
             Egg._write_with_indent(output_file, f"<VertexRef> {{ {i+0} {i+1} {i+2} <Ref> {{ {pool_name} }} }}\n", indent)
             indent -= INDENT_AMOUNT
             Egg._write_with_indent(output_file, "}\n", indent)

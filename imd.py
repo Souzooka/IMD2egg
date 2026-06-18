@@ -176,7 +176,7 @@ class IMDPrim:
             case 0x13:
                 prim_cls = IMDPrim0x13
             case 0x20:
-                prim_cls = IMDPrim0x20
+                prim_cls = IMDPrimVertexColor
             case 0x21:
                 prim_cls = IMDPrimTexture
             case 0x48:
@@ -306,10 +306,10 @@ class IMDPrim0x13(IMDPrim):
 
         return prim
 
-class IMDPrim0x20(IMDPrim):
+class IMDPrimVertexColor(IMDPrim):
     type: ClassVar[int] = 0x20
     # size = 0x50
-    # 20; vertex color scale?
+    # 10; vertex color scale?
     color_scale: Color4
     @classmethod
     def from_file(cls, f: BinaryIO):
@@ -317,8 +317,9 @@ class IMDPrim0x20(IMDPrim):
 
         prim = cls()
 
-        f.seek(pos + 0x20)
-        prim.color_scale = Color4(*struct.unpack("<4f", f.read(4*4)))
+        f.seek(pos + 0x10)
+        prim.color_scale = Color4(*(c / 255.0 for c in struct.unpack("<4f", f.read(4*4))))
+        prim.color_scale.a = min(prim.color_scale.a * 2.0, 1.0)
         
         f.seek(pos)
 
