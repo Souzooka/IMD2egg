@@ -183,3 +183,9 @@ class EggGroup:
             _write_with_indent(self.output_file, "}\n", self.indent)
 
         self.__num_vertex_pools += 1
+
+        # NOTE: Seemingly when a vertex pool is exhausted, the previously used texture is cleared.
+        # I'm not sure exactly if this affects other properties such as vertex color or not at this time.
+        # If we don't clear the texture ID, then triangles such as Geo's ring won't properly render
+        # as they are erroneously using his eye texture.
+        self.texture_id = -1
