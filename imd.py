@@ -98,7 +98,7 @@ class IMDHeader:
         #header.unk1C = struct.unpack("<I", f.read(4))[0]
 
         f.seek(pos + 0x20)
-        header.p_objects = list(struct.unpack(f"<{header.n_objects}I", f.read(4)))
+        header.p_objects = list(struct.unpack(f"<{header.n_objects}I", f.read(4*header.n_objects)))
         #header.unk24 = struct.unpack("<I", f.read(4))[0]
         #header.unk28 = struct.unpack("<I", f.read(4))[0]
         #header.unk2C = struct.unpack("<I", f.read(4))[0]
@@ -119,6 +119,8 @@ class IMDObj:
         match obj_type:
             case 0x10:
                 obj_cls = IMDObj0x10
+            case 0x20:
+                obj_cls = IMDObj0x20
             case _:
                 raise RuntimeError(f"Unrecognized IMD Obj type {hex(obj_type)}")
 
@@ -156,6 +158,20 @@ class IMDObj0x10(IMDObj):
     
     def get_prims(self) -> list[IMDPrim]:
         return self.prims
+    
+class IMDObj0x20(IMDObj):
+    type: ClassVar[int] = 0x20
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        obj = cls()
+        print(f"IMD | WARNING: Encountered unimplemented Obj type {hex(obj.type)}")
+        
+        f.seek(pos)
+
+        return obj
 
 class IMDPrim:
     type: ClassVar[int] = 0
@@ -179,8 +195,36 @@ class IMDPrim:
                 prim_cls = IMDPrimVertexColor
             case 0x21:
                 prim_cls = IMDPrimTexture
+            case 0x22:
+                prim_cls = IMDPrim0x22
+            case 0x23:
+                prim_cls = IMDPrim0x23
+            case 0x24:
+                prim_cls = IMDPrim0x24
+            case 0x25:
+                prim_cls = IMDPrim0x25
+            case 0x26:
+                prim_cls = IMDPrim0x26
+            case 0x28:
+                prim_cls = IMDPrim0x28
+            case 0x40:
+                prim_cls = IMDPrim0x40
+            case 0x41:
+                prim_cls = IMDPrim0x41
             case 0x48:
                 prim_cls = IMDPrimVertexPool
+            case 0x49:
+                prim_cls = IMDPrim0x49
+            case 0x4A:
+                prim_cls = IMDPrim0x4A
+            case 0x50:
+                prim_cls = IMDPrim0x50
+            case 0x58:
+                prim_cls = IMDPrim0x58
+            case 0x64:
+                prim_cls = IMDPrim0x64
+            case 0x6C:
+                prim_cls = IMDPrim0x6C
             case _:
                 raise RuntimeError(f"Unrecognized IMD Prim type {hex(prim_type)}")
 
@@ -239,6 +283,7 @@ class IMDPrim0x2(IMDPrim):
         pos = f.tell()
 
         prim = cls()
+        print(f"IMD | WARNING: Encountered unimplemented Prim type {hex(prim.type)}")
         
         f.seek(pos)
 
@@ -301,6 +346,7 @@ class IMDPrim0x13(IMDPrim):
         pos = f.tell()
 
         prim = cls()
+        print(f"IMD | WARNING: Encountered unimplemented Prim type {hex(prim.type)}")
         
         f.seek(pos)
 
@@ -345,6 +391,118 @@ class IMDPrimTexture(IMDPrim):
 
         f.seek(pos + 0x20)
         prim.color_scale = Color4(*struct.unpack("<4f", f.read(4*4)))
+        
+        f.seek(pos)
+
+        return prim
+
+class IMDPrim0x22(IMDPrim):
+    type: ClassVar[int] = 0x22
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        prim = cls()
+        print(f"IMD | WARNING: Encountered unimplemented Prim type {hex(prim.type)}")
+        
+        f.seek(pos)
+
+        return prim
+ 
+class IMDPrim0x23(IMDPrim):
+    type: ClassVar[int] = 0x23
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        prim = cls()
+        print(f"IMD | WARNING: Encountered unimplemented Prim type {hex(prim.type)}")
+        
+        f.seek(pos)
+
+        return prim
+    
+class IMDPrim0x24(IMDPrim):
+    type: ClassVar[int] = 0x24
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        prim = cls()
+        print(f"IMD | WARNING: Encountered unimplemented Prim type {hex(prim.type)}")
+        
+        f.seek(pos)
+
+        return prim
+    
+class IMDPrim0x25(IMDPrim):
+    type: ClassVar[int] = 0x25
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        prim = cls()
+        print(f"IMD | WARNING: Encountered unimplemented Prim type {hex(prim.type)}")
+        
+        f.seek(pos)
+
+        return prim
+    
+class IMDPrim0x26(IMDPrim):
+    type: ClassVar[int] = 0x26
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        prim = cls()
+        print(f"IMD | WARNING: Encountered unimplemented Prim type {hex(prim.type)}")
+        
+        f.seek(pos)
+
+        return prim
+    
+class IMDPrim0x28(IMDPrim):
+    type: ClassVar[int] = 0x28
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        prim = cls()
+        print(f"IMD | WARNING: Encountered unimplemented Prim type {hex(prim.type)}")
+        
+        f.seek(pos)
+
+        return prim
+    
+class IMDPrim0x40(IMDPrim):
+    type: ClassVar[int] = 0x40
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        prim = cls()
+        print(f"IMD | WARNING: Encountered unimplemented Prim type {hex(prim.type)}")
+        
+        f.seek(pos)
+
+        return prim
+    
+class IMDPrim0x41(IMDPrim):
+    type: ClassVar[int] = 0x41
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        prim = cls()
+        print(f"IMD | WARNING: Encountered unimplemented Prim type {hex(prim.type)}")
         
         f.seek(pos)
 
@@ -416,8 +574,7 @@ class IMDPrimVertexPool(IMDPrim):
 
         prim.vertices = []
         offset = 0x60
-        i = 0
-        while i < num_vertices:
+        for i in range(num_vertices):
             vertex_pos = pos + offset + (i * 0x18)
             f.seek(vertex_pos)
 
@@ -426,16 +583,99 @@ class IMDPrimVertexPool(IMDPrim):
                 # It appears this marks the end of a GIF packet(?)
                 # we can skip over the start of the next packet and
                 # continue reading vertex data
-                offset += 0x50
-                vertex_pos += 0x50
-
-                # FIXME this is a bit of a hackfix, I have to see why
-                # we aren't consuming all of the polygons when it's not 11 PM
-                num_vertices += 2
+                # (To do this we skip 0x50; but, we also want to skip over
+                # the first two vertices in the new packet as well, as they seem to
+                # just send the last two vertices from the old packet again,
+                # so 0x50 + (0x18 * 2) or 0x80 in total)
+                offset += 0x80
+                vertex_pos += 0x80
             f.seek(vertex_pos)
 
             prim.vertices.append(IMDPrimVertexPool.Vertex.from_file(f))
-            i += 1
+        
+        f.seek(pos)
+
+        return prim
+
+class IMDPrim0x49(IMDPrim):
+    type: ClassVar[int] = 0x49
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        prim = cls()
+        print(f"IMD | WARNING: Encountered unimplemented Prim type {hex(prim.type)}")
+        
+        f.seek(pos)
+
+        return prim
+    
+class IMDPrim0x4A(IMDPrim):
+    type: ClassVar[int] = 0x4A
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        prim = cls()
+        print(f"IMD | WARNING: Encountered unimplemented Prim type {hex(prim.type)}")
+        
+        f.seek(pos)
+
+        return prim
+    
+class IMDPrim0x50(IMDPrim):
+    type: ClassVar[int] = 0x50
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        prim = cls()
+        print(f"IMD | WARNING: Encountered unimplemented Prim type {hex(prim.type)}")
+        
+        f.seek(pos)
+
+        return prim
+
+class IMDPrim0x58(IMDPrim):
+    type: ClassVar[int] = 0x58
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        prim = cls()
+        print(f"IMD | WARNING: Encountered unimplemented Prim type {hex(prim.type)}")
+        
+        f.seek(pos)
+
+        return prim
+    
+class IMDPrim0x64(IMDPrim):
+    type: ClassVar[int] = 0x64
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        prim = cls()
+        print(f"IMD | WARNING: Encountered unimplemented Prim type {hex(prim.type)}")
+        
+        f.seek(pos)
+
+        return prim
+
+class IMDPrim0x6C(IMDPrim):
+    type: ClassVar[int] = 0x6C
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        prim = cls()
+        print(f"IMD | WARNING: Encountered unimplemented Prim type {hex(prim.type)}")
         
         f.seek(pos)
 
