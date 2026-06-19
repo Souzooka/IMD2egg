@@ -60,7 +60,7 @@ class Egg:
         vec = copy.copy(vec)
         match COORDINATE_SYSTEM:
             case "Z-up":
-                vec.x, vec.y, vec.z = -vec.x, -vec.z, -vec.y
+                vec.x, vec.y, vec.z = vec.x, vec.z, -vec.y
             case _:
                 raise RuntimeError("Unsupported .egg coordinate system")
         return vec
