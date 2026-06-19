@@ -416,7 +416,8 @@ class IMDPrimVertexPool(IMDPrim):
 
         prim.vertices = []
         offset = 0x60
-        for i in range(num_vertices):
+        i = 0
+        while i < num_vertices:
             vertex_pos = pos + offset + (i * 0x18)
             f.seek(vertex_pos)
 
@@ -425,11 +426,16 @@ class IMDPrimVertexPool(IMDPrim):
                 # It appears this marks the end of a GIF packet(?)
                 # we can skip over the start of the next packet and
                 # continue reading vertex data
-                offset += 0x38
-                continue
+                offset += 0x50
+                vertex_pos += 0x50
+
+                # FIXME this is a bit of a hackfix, I have to see why
+                # we aren't consuming all of the polygons when it's not 11 PM
+                num_vertices += 2
             f.seek(vertex_pos)
 
             prim.vertices.append(IMDPrimVertexPool.Vertex.from_file(f))
+            i += 1
         
         f.seek(pos)
 
