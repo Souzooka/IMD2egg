@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import copy
-from typing import TextIO, cast
+from typing import TextIO
 
 from imd import IMD, IMDPrimGroup, IMDPrimTexture, IMDPrimTransformState, IMDPrimVertexPool, IMDPrimVertexColor, IMDPrim0x2, IMDPrim0x13
 from util import Color4, Vec4
@@ -168,6 +168,10 @@ class EggGroup:
         # NOTE: These are probably always triangle strips...
         r, g, b, a = self.vertex_rgba
         for i in range(0, len(prim.vertices)-2):
+            # Skip this polygon if the last vertex doesn't close it
+            if not prim.vertices[i+2].closes_triangle:
+                continue
+
             _write_with_indent(self.output_file, f"<Polygon> {{\n", self.indent)
             self.indent += INDENT_AMOUNT
             if self.texture_id != -1:

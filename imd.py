@@ -363,8 +363,10 @@ class IMDPrimVertexPool(IMDPrim):
         # some unknown info,
         # a divisor value to convert shorts into floats,
         # some unknown info, and some UV info?
-        # 0
+        # 0..5
         position: Vec4
+        # 6 (short); indicates that this vertex creates a polygon if nonzero?
+        closes_triangle: bool
         # 10 (short)
         u: float
         # 12 (short)
@@ -382,6 +384,9 @@ class IMDPrimVertexPool(IMDPrim):
             f.seek(pos + 0x0)
             # NOTE: This scale is just arbitrary
             vertex.position = Vec4(*(c / 0x40 for c in struct.unpack("<3h", f.read(2*3))))
+
+            f.seek(pos + 0x6)
+            vertex.closes_triangle = bool(struct.unpack("<h", f.read(2))[0] != 0)
 
             f.seek(pos + 0x10)
             vertex.u = struct.unpack("<h", f.read(2))[0] / 0x1000
