@@ -415,18 +415,18 @@ class IMDPrimVertexPool(IMDPrim):
         num_vertices = struct.unpack("<H", f.read(2))[0]
 
         prim.vertices = []
+        offset = 0x60
         for i in range(num_vertices):
-            vertex_pos = pos + 0x60 + (i * 0x18)
+            vertex_pos = pos + offset + (i * 0x18)
             f.seek(vertex_pos)
 
-            # TODO: Models can seem to have breaks in their vertices list,
-            # indicated by a 0x17 0xF bytes away from the last vertex.
-            # How to handle this is unknown...
-            # This might be to indicate two parts of the model which
-            # don't have any vertices connecting them, perhaps?
             f.seek(vertex_pos + 0xF)
             if struct.unpack("<B", f.read(1))[0] == 0x17:
-                raise RuntimeError(f"Found break in vertex list at {hex(vertex_pos)}; handling unimplemented.")
+                # It appears this marks the end of a GIF packet(?)
+                # we can skip over the start of the next packet and
+                # continue reading vertex data
+                offset += 0x38
+                continue
             f.seek(vertex_pos)
 
             prim.vertices.append(IMDPrimVertexPool.Vertex.from_file(f))
