@@ -214,7 +214,7 @@ class IMDPrim:
             case 0x48:
                 prim_cls = IMDPrimVertexPool
             case 0x49:
-                prim_cls = IMDPrim0x49
+                prim_cls = IMDPrimVertexPoolWithRGBA
             case 0x4A:
                 prim_cls = IMDPrim0x4A
             case 0x50:
@@ -508,60 +508,63 @@ class IMDPrim0x41(IMDPrim):
 
         return prim
 
+class Vertex0x48:
+    # size = 0x18 (0x48)
+    size = 0x18
+    # OK, so here we seem to have the position of each vertex,
+    # some unknown info,
+    # a divisor value to convert shorts into floats,
+    # some unknown info, and some UV info?
+    # 0..5
+    position: Vec4
+    # 6 (short); indicates that this vertex creates a polygon if nonzero?
+    closes_triangle: bool
+    # 10 (short)
+    u: float
+    # 12 (short)
+    v: float
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        vertex = cls()
+
+        f.seek(pos + 0xE)
+        # TODO: Some sort of scale value, guessing at this
+        #scale = struct.unpack("<h", f.read(2))[0] / 0x1000
+
+        f.seek(pos + 0x0)
+        # NOTE: This scale is just arbitrary
+        vertex.position = Vec4(*(c / 0x40 for c in struct.unpack("<3h", f.read(2*3))))
+
+        f.seek(pos + 0x6)
+        vertex.closes_triangle = bool(struct.unpack("<h", f.read(2))[0] != 0)
+
+        f.seek(pos + 0x10)
+        vertex.u = struct.unpack("<h", f.read(2))[0] / 0x1000
+        vertex.v = 1.0 - struct.unpack("<h", f.read(2))[0] / 0x1000
+
+        f.seek(pos)
+        return vertex
+    
+    @property
+    def x(self):
+        return self.position.x
+    @property
+    def y(self):
+        return self.position.y
+    @property
+    def z(self):
+        return self.position.z
+
 class IMDPrimVertexPool(IMDPrim):
     type: ClassVar[int] = 0x48
     # UV + vertex data?
     # E; number of vertices
     # 60; the vertex data
-    vertices: list[Vertex]
-
-    class Vertex:
-        # size = 0x18
-        # OK, so here we seem to have the position of each vertex,
-        # some unknown info,
-        # a divisor value to convert shorts into floats,
-        # some unknown info, and some UV info?
-        # 0..5
-        position: Vec4
-        # 6 (short); indicates that this vertex creates a polygon if nonzero?
-        closes_triangle: bool
-        # 10 (short)
-        u: float
-        # 12 (short)
-        v: float
-        @classmethod
-        def from_file(cls, f: BinaryIO):
-            pos = f.tell()
-
-            vertex = cls()
-
-            f.seek(pos + 0xE)
-            # TODO: Some sort of scale value, guessing at this
-            #scale = struct.unpack("<h", f.read(2))[0] / 0x1000
-
-            f.seek(pos + 0x0)
-            # NOTE: This scale is just arbitrary
-            vertex.position = Vec4(*(c / 0x40 for c in struct.unpack("<3h", f.read(2*3))))
-
-            f.seek(pos + 0x6)
-            vertex.closes_triangle = bool(struct.unpack("<h", f.read(2))[0] != 0)
-
-            f.seek(pos + 0x10)
-            vertex.u = struct.unpack("<h", f.read(2))[0] / 0x1000
-            vertex.v = 1.0 - struct.unpack("<h", f.read(2))[0] / 0x1000
-
-            f.seek(pos)
-            return vertex
-        
-        @property
-        def x(self):
-            return self.position.x
-        @property
-        def y(self):
-            return self.position.y
-        @property
-        def z(self):
-            return self.position.z
+    VERTEX_CLASS = Vertex0x48
+    vertices: list[Vertex0x48]
 
     @classmethod
     def from_file(cls, f: BinaryIO):
@@ -575,7 +578,7 @@ class IMDPrimVertexPool(IMDPrim):
         prim.vertices = []
         offset = 0x60
         for i in range(num_vertices):
-            vertex_pos = pos + offset + (i * 0x18)
+            vertex_pos = pos + offset + (i * prim.VERTEX_CLASS.size)
             f.seek(vertex_pos)
 
             f.seek(vertex_pos + 0xF)
@@ -587,29 +590,45 @@ class IMDPrimVertexPool(IMDPrim):
                 # the first two vertices in the new packet as well, as they seem to
                 # just send the last two vertices from the old packet again,
                 # so 0x50 + (0x18 * 2) or 0x80 in total)
-                offset += 0x80
-                vertex_pos += 0x80
+                offset += 0x50 + prim.VERTEX_CLASS.size * 2
+                vertex_pos += 0x50 + prim.VERTEX_CLASS.size * 2
             f.seek(vertex_pos)
 
-            prim.vertices.append(IMDPrimVertexPool.Vertex.from_file(f))
+            prim.vertices.append(prim.VERTEX_CLASS.from_file(f))
         
         f.seek(pos)
 
         return prim
 
-class IMDPrim0x49(IMDPrim):
-    type: ClassVar[int] = 0x49
+class Vertex0x49(Vertex0x48):
+    # size = 0x20
+    size = 0x20
+    # Like the vertex class used for primitive 0x48, but this vertex
+    # also has color data which is linearly interpolated on the triangle
+    # along other vertices in the triangle.
+    # 18 - packed uint16 color rgba
+    color: Color4
 
     @classmethod
     def from_file(cls, f: BinaryIO):
+        vert = super().from_file(f)
+        
         pos = f.tell()
 
-        prim = cls()
-        print(f"IMD | WARNING: Encountered unimplemented Prim type {hex(prim.type)}")
+        f.seek(pos + 0x18)
+        vert.color = Color4(*(c / 0x80 for c in struct.unpack("<4h", f.read(2*4))))
+        vert.color.a = min(vert.color.a * 2, 1.0)
         
         f.seek(pos)
+        return vert
 
-        return prim
+class IMDPrimVertexPoolWithRGBA(IMDPrimVertexPool):
+    type: ClassVar[int] = 0x49
+    VERTEX_CLASS = Vertex0x49
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        return super().from_file(f)
     
 class IMDPrim0x4A(IMDPrim):
     type: ClassVar[int] = 0x4A

@@ -3,7 +3,18 @@ from __future__ import annotations
 import copy
 from typing import TextIO
 
-from imd import IMD, IMDPrimGroup, IMDPrimTexture, IMDPrimTransformState, IMDPrimVertexPool, IMDPrimVertexColor, IMDPrim0x2, IMDPrim0x13
+from imd import (
+    IMD, 
+    IMDPrimGroup, # 01
+    IMDPrim0x2, # 02
+    IMDPrimTransformState, # 10
+    IMDPrim0x13, # 13
+    IMDPrimVertexColor, # 20
+    IMDPrimTexture, # 21
+    IMDPrimVertexPool, # 48
+    IMDPrimVertexPoolWithRGBA, # 49
+    Vertex0x49,
+)
 from util import Color4, Vec4
 
 # Various constants yadayada
@@ -122,6 +133,9 @@ class EggGroup:
                 case 0x48:
                     assert isinstance(prim, IMDPrimVertexPool)
                     self.__proc_prim_vertex_pool(prim)
+                case 0x49:
+                    assert isinstance(prim, IMDPrimVertexPoolWithRGBA)
+                    self.__proc_prim_vertex_pool(prim)
                 case _:
                     print(f"EggGroup: Unknown prim type {hex(prim.type)}")
 
@@ -159,6 +173,10 @@ class EggGroup:
             _write_with_indent(self.output_file, f"<Vertex> {i} {{ {vec.x} {vec.y} {vec.z}\n", self.indent)
             self.indent += INDENT_AMOUNT
             _write_with_indent(self.output_file, f"<UV> {{ {vertex.u} {vertex.v} }}\n", self.indent)
+            if isinstance(prim, IMDPrimVertexPoolWithRGBA):
+                assert isinstance(vertex, Vertex0x49)
+                c = vertex.color
+                _write_with_indent(self.output_file, f"<RGBA> {{ {c.r} {c.g} {c.b} {c.a} }}\n", self.indent)
             self.indent -= INDENT_AMOUNT
             _write_with_indent(self.output_file, "}\n", self.indent)
         self.indent -= INDENT_AMOUNT
