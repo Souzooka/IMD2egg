@@ -537,8 +537,12 @@ class Vertex0x48:
     # some unknown info, and some UV info?
     # 0..5
     position: Vec4
-    # 6 (short); indicates that this vertex creates a polygon if nonzero?
-    closes_triangle: bool
+    # 6 (short); The vertex order of the polygon this vertex is the last vertex for.
+    # Can be 1 of three possible value ranges:
+    # x<0: The vertices are in ascending order (e.g. 0 1 2, at least for Panda3D)
+    # x=0: A polygon is not drawn using this vertex as the last vertex
+    # x>0: The vertices are in descending order (e.g. 2 1 0, at least for Panda3D)
+    vertex_order: int
     # 10 (short)
     u: float
     # 12 (short)
@@ -559,7 +563,7 @@ class Vertex0x48:
         vertex.position = Vec4(*(c / 0x40 for c in struct.unpack("<3h", f.read(2*3))))
 
         f.seek(pos + 0x6)
-        vertex.closes_triangle = bool(struct.unpack("<h", f.read(2))[0] != 0)
+        vertex.vertex_order = struct.unpack("<h", f.read(2))[0]
 
         f.seek(pos + 0x10)
         vertex.u = struct.unpack("<h", f.read(2))[0] / 0x1000

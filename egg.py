@@ -187,7 +187,7 @@ class EggGroup:
         r, g, b, a = self.vertex_rgba
         for i in range(0, len(prim.vertices)-2):
             # Skip this polygon if the last vertex doesn't close it
-            if not prim.vertices[i+2].closes_triangle:
+            if prim.vertices[i+2].vertex_order == 0:
                 continue
 
             _write_with_indent(self.output_file, f"<Polygon> {{\n", self.indent)
@@ -196,7 +196,10 @@ class EggGroup:
                 _write_with_indent(self.output_file, f"<TRef> {{ {self.texture_id} }}\n", self.indent)
             _write_with_indent(self.output_file, f"<RGBA> {{ {r} {g} {b} {a} }}\n", self.indent)
             _write_with_indent(self.output_file, f"<BFace> {{ 0 }}\n", self.indent)
-            _write_with_indent(self.output_file, f"<VertexRef> {{ {i+0} {i+1} {i+2} <Ref> {{ {pool_name} }} }}\n", self.indent)
+            if prim.vertices[i+2].vertex_order > 0:
+                _write_with_indent(self.output_file, f"<VertexRef> {{ {i+2} {i+1} {i+0} <Ref> {{ {pool_name} }} }}\n", self.indent)
+            else:
+                _write_with_indent(self.output_file, f"<VertexRef> {{ {i+0} {i+1} {i+2} <Ref> {{ {pool_name} }} }}\n", self.indent)
             self.indent -= INDENT_AMOUNT
             _write_with_indent(self.output_file, "}\n", self.indent)
 
