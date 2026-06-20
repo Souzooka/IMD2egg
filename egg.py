@@ -194,6 +194,12 @@ class EggGroup:
             self.indent += INDENT_AMOUNT
             if self.texture_id != -1:
                 _write_with_indent(self.output_file, f"<TRef> {{ {self.texture_id} }}\n", self.indent)
+            # Normals
+            # FIXME: The way normals is applied right now doesn't seem 100% correct, so
+            # an eye needs to be kept on this
+            normal = Egg.convert_imd_coordinates(prim.vertices[i+2].normal)
+            _write_with_indent(self.output_file, f"<Normal> {{ {normal[0]} {normal[1]} {normal[2]} }}", self.indent)
+            # RGBA
             _write_with_indent(self.output_file, f"<RGBA> {{ {r} {g} {b} {a} }}\n", self.indent)
             _write_with_indent(self.output_file, f"<BFace> {{ 0 }}\n", self.indent)
             if prim.vertices[i+2].vertex_order > 0:

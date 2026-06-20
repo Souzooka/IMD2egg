@@ -543,6 +543,8 @@ class Vertex0x48:
     # x=0: A polygon is not drawn using this vertex as the last vertex
     # x>0: The vertices are in descending order (e.g. 2 1 0, at least for Panda3D)
     vertex_order: int
+    # 8..D 3 signed 16-bits for normal?
+    normal: Vec4
     # 10 (short)
     u: float
     # 12 (short)
@@ -564,6 +566,9 @@ class Vertex0x48:
 
         f.seek(pos + 0x6)
         vertex.vertex_order = struct.unpack("<h", f.read(2))[0]
+
+        f.seek(pos + 0x8)
+        vertex.normal = Vec4(*(v / 0x8000 for v in struct.unpack("<3h", f.read(2*3))))
 
         f.seek(pos + 0x10)
         vertex.u = struct.unpack("<h", f.read(2))[0] / 0x1000
