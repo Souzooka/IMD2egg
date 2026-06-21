@@ -168,11 +168,19 @@ class EggGroup:
         _write_with_indent(self.output_file, f"<VertexPool> {pool_name} {{\n", self.indent)
         self.indent += INDENT_AMOUNT
 
+        # Write each vertex tag
         for i, vertex in enumerate(prim.vertices):
             vec = Egg.convert_imd_coordinates(vertex.position)
             _write_with_indent(self.output_file, f"<Vertex> {i} {{ {vec.x} {vec.y} {vec.z}\n", self.indent)
             self.indent += INDENT_AMOUNT
+            # Scalars
+            # Normal
+            if prim.has_vertex_normals:
+                normal = Egg.convert_imd_coordinates(vertex.normal)
+                _write_with_indent(self.output_file, f"<Normal> {{ {normal[0]} {normal[1]} {normal[2]} }}\n", self.indent)
+            # UV
             _write_with_indent(self.output_file, f"<UV> {{ {vertex.u} {vertex.v} }}\n", self.indent)
+            # RGBA
             if isinstance(prim, IMDPrimVertexPoolWithRGBA):
                 assert isinstance(vertex, Vertex0x49)
                 c = vertex.color
@@ -182,8 +190,7 @@ class EggGroup:
         self.indent -= INDENT_AMOUNT
         _write_with_indent(self.output_file, "}\n", self.indent)
 
-        # TODO: How do these vertices connect together...?
-        # NOTE: These are probably always triangle strips...
+        # These seem to always be triangle strips
         r, g, b, a = self.vertex_rgba
         for i in range(0, len(prim.vertices)-2):
             # Skip this polygon if the last vertex doesn't close it
@@ -192,16 +199,19 @@ class EggGroup:
 
             _write_with_indent(self.output_file, f"<Polygon> {{\n", self.indent)
             self.indent += INDENT_AMOUNT
+            # Scalars
+            # Texture
             if self.texture_id != -1:
                 _write_with_indent(self.output_file, f"<TRef> {{ {self.texture_id} }}\n", self.indent)
             # Normals
-            # FIXME: The way normals is applied right now doesn't seem 100% correct, so
-            # an eye needs to be kept on this
-            normal = Egg.convert_imd_coordinates(prim.vertices[i+2].normal)
-            _write_with_indent(self.output_file, f"<Normal> {{ {normal[0]} {normal[1]} {normal[2]} }}", self.indent)
+            if not prim.has_vertex_normals:
+                normal = Egg.convert_imd_coordinates(prim.vertices[i+2].normal)
+                _write_with_indent(self.output_file, f"<Normal> {{ {normal[0]} {normal[1]} {normal[2]} }}\n", self.indent)
             # RGBA
             _write_with_indent(self.output_file, f"<RGBA> {{ {r} {g} {b} {a} }}\n", self.indent)
+            # Back face always seems to be false
             _write_with_indent(self.output_file, f"<BFace> {{ 0 }}\n", self.indent)
+            # Vertex ordering is different based on a value immediately after where vertex position is stored
             if prim.vertices[i+2].vertex_order > 0:
                 _write_with_indent(self.output_file, f"<VertexRef> {{ {i+2} {i+1} {i+0} <Ref> {{ {pool_name} }} }}\n", self.indent)
             else:

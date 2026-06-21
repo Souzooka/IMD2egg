@@ -591,6 +591,8 @@ class IMDPrimVertexPool(IMDPrim):
     type: ClassVar[int] = 0x48
     # UV + vertex data?
     # E; number of vertices
+    # 36 bit2; seems to be a flag indicating that vertex normals should be used
+    has_vertex_normals: bool
     # 60; the vertex data
     VERTEX_CLASS = Vertex0x48
     vertices: list[Vertex0x48]
@@ -603,6 +605,9 @@ class IMDPrimVertexPool(IMDPrim):
 
         f.seek(pos + 0xE)
         num_vertices = struct.unpack("<H", f.read(2))[0]
+
+        f.seek(pos + 0x36)
+        prim.has_vertex_normals = bool(struct.unpack("<B", f.read(1))[0] & 0x4)
 
         prim.vertices = []
         offset = 0x60
