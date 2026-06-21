@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import struct
+from dataclasses import dataclass, field
 from typing import BinaryIO, ClassVar, Sequence, cast
 
 from util import Color4, Vec4
@@ -172,6 +173,45 @@ class IMDObj0x20(IMDObj):
         f.seek(pos)
 
         return obj
+    
+@dataclass
+class Vertex:
+    # Generic vertex object class
+    size: ClassVar[int] = 0x0
+    """Size of the vertex object (in the IMD file)"""
+    position: Vec4 = field(default_factory=Vec4)
+    """Position of this vertex"""
+    vertex_order: int = 0
+    """The vertex order of the polygon this vertex is the last vertex for.
+    Can be 1 of three possible value ranges:
+
+    x<0: The vertices are in ascending order (e.g. 0 1 2, at least for Panda3D)
+
+    x=0: A polygon is not drawn using this vertex as the last vertex
+
+    x>0: The vertices are in descending order (e.g. 2 1 0, at least for Panda3D)
+    """
+    normal: Vec4 = field(default_factory=Vec4)
+    """
+    The normal for this vertex. Note that if the vertex pool does not use vertex normals,
+    the normal of the last vertex will be used for the polygon instead.
+    """
+    rgba: Color4 | None = None
+    """RGBA for the vertex; not all vertex pool types have RGBA values."""
+    u: float = 0.0
+    """Texture U coordinate"""
+    v: float = 0.0
+    """Texture V coordinate"""
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        vert = cls()
+        
+        f.seek(pos)
+
+        return vert
 
 class IMDPrim:
     type: ClassVar[int] = 0
@@ -208,15 +248,15 @@ class IMDPrim:
             case 0x28:
                 prim_cls = IMDPrim0x28
             case 0x40:
-                prim_cls = IMDPrim0x40
+                prim_cls = IMDPrimFloatVertexPool
             case 0x41:
-                prim_cls = IMDPrim0x41
+                prim_cls = IMDPrimFloatVertexPoolWithRGBA
             case 0x42:
                 prim_cls = IMDPrim0x42
             case 0x48:
-                prim_cls = IMDPrimVertexPool
+                prim_cls = IMDPrimShortVertexPool
             case 0x49:
-                prim_cls = IMDPrimVertexPoolWithRGBA
+                prim_cls = IMDPrimShortVertexPoolWithRGBA
             case 0x4A:
                 prim_cls = IMDPrim0x4A
             case 0x50:
@@ -241,6 +281,52 @@ class IMDPrim:
     
     def get_prims(self) -> Sequence[IMDPrim]:
         return []
+    
+class IMDPrimGenericVertexPool(IMDPrim):
+    type = 0x100 #special
+    # Generic class for vertex pool primitives
+    VERTEX_CLASS = Vertex
+    VERTEX_START_OFFSET = 0x60
+    has_vertex_normals: bool
+    vertices: Sequence[Vertex]
+
+    @classmethod
+    def from_file(cls, f: BinaryIO): # type: ignore # This is a base class so it's fine
+        pos = f.tell()
+
+        prim = cls()
+
+        f.seek(pos + 0xE)
+        num_vertices = struct.unpack("<H", f.read(2))[0]
+
+        f.seek(pos + 0x36)
+        prim.has_vertex_normals = bool(struct.unpack("<B", f.read(1))[0] & 0x4)
+
+        prim.vertices = []
+        offset = cls.VERTEX_START_OFFSET
+        for i in range(num_vertices):
+            vertex_pos = pos + offset + (i * prim.VERTEX_CLASS.size)
+            f.seek(vertex_pos)
+
+            f.seek(vertex_pos + 0xF)
+            if struct.unpack("<B", f.read(1))[0] == 0x17:
+                # It appears this marks the end of a GIF packet(?)
+                # we can skip over the start of the next packet and
+                # continue reading vertex data
+                # (To do this we skip 0x50; but, we also want to skip over
+                # the first two vertices in the new packet as well, as they seem to
+                # just send the last two vertices from the old packet again,
+                # so 0x50 + (0x18 * 2) or 0x80 in total)
+                delta = (prim.VERTEX_START_OFFSET - 0x10) + prim.VERTEX_CLASS.size * 2
+                offset += delta
+                vertex_pos += delta
+            f.seek(vertex_pos)
+
+            prim.vertices.append(prim.VERTEX_CLASS.from_file(f))
+        
+        f.seek(pos)
+
+        return prim
 
 class IMDPrimGroup(IMDPrim):
     type: ClassVar[int] = 1
@@ -486,33 +572,73 @@ class IMDPrim0x28(IMDPrim):
 
         return prim
     
-class IMDPrim0x40(IMDPrim):
-    type: ClassVar[int] = 0x40
+class Vertex0x40(Vertex):
+    size = 0x30
 
     @classmethod
     def from_file(cls, f: BinaryIO):
         pos = f.tell()
+        vert = cls()
 
-        prim = cls()
-        print(f"IMD | WARNING: Encountered unimplemented Prim type {hex(prim.type)}")
-        
+        # 0..B; 3 packed floats for position
+        f.seek(pos + 0x0)
+        vert.position = Vec4(*struct.unpack("<3f", f.read(4*3)))
+
+        # C; vertex order
+        # This one is a bit weird; if when read as a 16-bit and is non-zero,
+        # this polygon is not drawn. Else, we use the float value to
+        # determine the order (usu. 1.0f or -1.0f).
+        f.seek(pos + 0xC)
+        is_drawn = struct.unpack("<h", f.read(2))[0] == 0
+        if not is_drawn:
+            vert.vertex_order = 0
+        else:
+            f.seek(pos + 0xC)
+            vert.vertex_order = int(struct.unpack("<f", f.read(4))[0])
+
+        # 10..1B; 3 packed floats for normal
+        f.seek(pos + 0x10)
+        vert.normal = Vec4(*struct.unpack("<3f", f.read(4*3)))
+
+        # 20/24; u and v
+        f.seek(pos + 0x20)
+        vert.u = struct.unpack("<f", f.read(4))[0]
+        vert.v = 1.0 - struct.unpack("<f", f.read(4))[0]
+
         f.seek(pos)
-
-        return prim
+        return vert
     
-class IMDPrim0x41(IMDPrim):
-    type: ClassVar[int] = 0x41
+class IMDPrimFloatVertexPool(IMDPrimGenericVertexPool):
+    type: ClassVar[int] = 0x40
+    VERTEX_CLASS = Vertex0x40
+    VERTEX_START_OFFSET = 0x50
+
+class Vertex0x41(Vertex0x40):
+    # size = 0x20
+    size = 0x40
+    # Like the vertex class used for primitive 0x08, but this vertex
+    # also has color data which is linearly interpolated on the triangle
+    # along other vertices in the triangle.
 
     @classmethod
     def from_file(cls, f: BinaryIO):
+        vert = super().from_file(f)
+        
         pos = f.tell()
 
-        prim = cls()
-        print(f"IMD | WARNING: Encountered unimplemented Prim type {hex(prim.type)}")
+        # 30 - packed float color rgba
+        f.seek(pos + 0x30)
+        vert.rgba = Color4(*(c / 128.0 for c in struct.unpack("<4f", f.read(4*4))))
+        #vert.rgba.a = min(vert.rgba.a * 2, 1.0)
         
         f.seek(pos)
-
-        return prim
+        return vert
+    
+class IMDPrimFloatVertexPoolWithRGBA(IMDPrimFloatVertexPool):
+    type: ClassVar[int] = 0x41
+    VERTEX_CLASS = Vertex0x41
+    # NOTE: I have not thoroughly tested this, but after glancing at it in a file
+    # this seems similar to the 0x48/0x49 pairing.
     
 class IMDPrim0x42(IMDPrim):
     type: ClassVar[int] = 0x42
@@ -528,27 +654,8 @@ class IMDPrim0x42(IMDPrim):
 
         return prim
 
-class Vertex0x48:
-    # size = 0x18 (0x48)
+class Vertex0x48(Vertex):
     size = 0x18
-    # OK, so here we seem to have the position of each vertex,
-    # some unknown info,
-    # a divisor value to convert shorts into floats,
-    # some unknown info, and some UV info?
-    # 0..5
-    position: Vec4
-    # 6 (short); The vertex order of the polygon this vertex is the last vertex for.
-    # Can be 1 of three possible value ranges:
-    # x<0: The vertices are in ascending order (e.g. 0 1 2, at least for Panda3D)
-    # x=0: A polygon is not drawn using this vertex as the last vertex
-    # x>0: The vertices are in descending order (e.g. 2 1 0, at least for Panda3D)
-    vertex_order: int
-    # 8..D 3 signed 16-bits for normal?
-    normal: Vec4
-    # 10 (short)
-    u: float
-    # 12 (short)
-    v: float
 
     @classmethod
     def from_file(cls, f: BinaryIO):
@@ -561,15 +668,26 @@ class Vertex0x48:
         #scale = struct.unpack("<h", f.read(2))[0] / 0x1000
 
         f.seek(pos + 0x0)
+        # 0..5; packed 3 signed 16-bit Vertex position
         # NOTE: This scale is just arbitrary
         vertex.position = Vec4(*(c / 0x40 for c in struct.unpack("<3h", f.read(2*3))))
 
+        # 6 (short); The vertex order of the polygon this vertex is the last vertex for.
+        # Can be 1 of three possible value ranges:
+        # x<0: The vertices are in ascending order (e.g. 0 1 2, at least for Panda3D)
+        # x=0: A polygon is not drawn using this vertex as the last vertex
+        # x>0: The vertices are in descending order (e.g. 2 1 0, at least for Panda3D)
         f.seek(pos + 0x6)
         vertex.vertex_order = struct.unpack("<h", f.read(2))[0]
 
+        # 8..D 3 signed 16-bits for normal?
         f.seek(pos + 0x8)
         vertex.normal = Vec4(*(v / 0x8000 for v in struct.unpack("<3h", f.read(2*3))))
 
+        # 10 texture U (short)
+        # 12 texture V (short)
+        # NOTE: 14 and 16 seem to be possibly be divisors for U and V,
+        # these are probably 0x1000 but we should probably read these too.
         f.seek(pos + 0x10)
         vertex.u = struct.unpack("<h", f.read(2))[0] / 0x1000
         vertex.v = 1.0 - struct.unpack("<h", f.read(2))[0] / 0x1000
@@ -587,52 +705,9 @@ class Vertex0x48:
     def z(self):
         return self.position.z
 
-class IMDPrimVertexPool(IMDPrim):
+class IMDPrimShortVertexPool(IMDPrimGenericVertexPool):
     type: ClassVar[int] = 0x48
-    # UV + vertex data?
-    # E; number of vertices
-    # 36 bit2; seems to be a flag indicating that vertex normals should be used
-    has_vertex_normals: bool
-    # 60; the vertex data
     VERTEX_CLASS = Vertex0x48
-    vertices: list[Vertex0x48]
-
-    @classmethod
-    def from_file(cls, f: BinaryIO):
-        pos = f.tell()
-
-        prim = cls()
-
-        f.seek(pos + 0xE)
-        num_vertices = struct.unpack("<H", f.read(2))[0]
-
-        f.seek(pos + 0x36)
-        prim.has_vertex_normals = bool(struct.unpack("<B", f.read(1))[0] & 0x4)
-
-        prim.vertices = []
-        offset = 0x60
-        for i in range(num_vertices):
-            vertex_pos = pos + offset + (i * prim.VERTEX_CLASS.size)
-            f.seek(vertex_pos)
-
-            f.seek(vertex_pos + 0xF)
-            if struct.unpack("<B", f.read(1))[0] == 0x17:
-                # It appears this marks the end of a GIF packet(?)
-                # we can skip over the start of the next packet and
-                # continue reading vertex data
-                # (To do this we skip 0x50; but, we also want to skip over
-                # the first two vertices in the new packet as well, as they seem to
-                # just send the last two vertices from the old packet again,
-                # so 0x50 + (0x18 * 2) or 0x80 in total)
-                offset += 0x50 + prim.VERTEX_CLASS.size * 2
-                vertex_pos += 0x50 + prim.VERTEX_CLASS.size * 2
-            f.seek(vertex_pos)
-
-            prim.vertices.append(prim.VERTEX_CLASS.from_file(f))
-        
-        f.seek(pos)
-
-        return prim
 
 class Vertex0x49(Vertex0x48):
     # size = 0x20
@@ -640,8 +715,6 @@ class Vertex0x49(Vertex0x48):
     # Like the vertex class used for primitive 0x48, but this vertex
     # also has color data which is linearly interpolated on the triangle
     # along other vertices in the triangle.
-    # 18 - packed uint16 color rgba
-    color: Color4
 
     @classmethod
     def from_file(cls, f: BinaryIO):
@@ -649,20 +722,17 @@ class Vertex0x49(Vertex0x48):
         
         pos = f.tell()
 
+        # 18 - packed uint16 color rgba
         f.seek(pos + 0x18)
-        vert.color = Color4(*(c / 0x80 for c in struct.unpack("<4h", f.read(2*4))))
-        vert.color.a = min(vert.color.a * 2, 1.0)
+        vert.rgba = Color4(*(c / 0x80 for c in struct.unpack("<4h", f.read(2*4))))
+        vert.rgba.a = min(vert.rgba.a * 2, 1.0)
         
         f.seek(pos)
         return vert
 
-class IMDPrimVertexPoolWithRGBA(IMDPrimVertexPool):
+class IMDPrimShortVertexPoolWithRGBA(IMDPrimShortVertexPool):
     type: ClassVar[int] = 0x49
     VERTEX_CLASS = Vertex0x49
-
-    @classmethod
-    def from_file(cls, f: BinaryIO):
-        return super().from_file(f)
     
 class IMDPrim0x4A(IMDPrim):
     type: ClassVar[int] = 0x4A

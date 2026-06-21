@@ -5,15 +5,17 @@ from typing import TextIO
 
 from imd import (
     IMD, 
+    IMDPrimGenericVertexPool,
     IMDPrimGroup, # 01
     IMDPrim0x2, # 02
     IMDPrimTransformState, # 10
     IMDPrim0x13, # 13
     IMDPrimVertexColor, # 20
     IMDPrimTexture, # 21
-    IMDPrimVertexPool, # 48
-    IMDPrimVertexPoolWithRGBA, # 49
-    Vertex0x49,
+    #IMDPrimFloatVertexPool, # 40
+    #IMDPrimFloatVertexPoolWithRGBA, # 41
+    #IMDPrimShortVertexPool, # 48
+    #IMDPrimShortVertexPoolWithRGBA, # 49
 )
 from util import Color4, Vec4
 
@@ -130,11 +132,8 @@ class EggGroup:
                 case 0x21:
                     assert isinstance(prim, IMDPrimTexture)
                     self.__proc_prim_texture(prim)
-                case 0x48:
-                    assert isinstance(prim, IMDPrimVertexPool)
-                    self.__proc_prim_vertex_pool(prim)
-                case 0x49:
-                    assert isinstance(prim, IMDPrimVertexPoolWithRGBA)
+                case 0x40 | 0x41 | 0x48 | 0x49:
+                    assert isinstance(prim, IMDPrimGenericVertexPool)
                     self.__proc_prim_vertex_pool(prim)
                 case _:
                     print(f"EggGroup: Unknown prim type {hex(prim.type)}")
@@ -162,7 +161,7 @@ class EggGroup:
     def __proc_prim_texture(self, prim: IMDPrimTexture):
         self.texture_id = prim.texture_id
 
-    def __proc_prim_vertex_pool(self, prim: IMDPrimVertexPool):
+    def __proc_prim_vertex_pool(self, prim: IMDPrimGenericVertexPool):
         assert self.output_file is not None
         pool_name = f"{self.name}_{self.__num_vertex_pools}.verts"
         _write_with_indent(self.output_file, f"<VertexPool> {pool_name} {{\n", self.indent)
@@ -181,9 +180,8 @@ class EggGroup:
             # UV
             _write_with_indent(self.output_file, f"<UV> {{ {vertex.u} {vertex.v} }}\n", self.indent)
             # RGBA
-            if isinstance(prim, IMDPrimVertexPoolWithRGBA):
-                assert isinstance(vertex, Vertex0x49)
-                c = vertex.color
+            if vertex.rgba is not None:
+                c = vertex.rgba
                 _write_with_indent(self.output_file, f"<RGBA> {{ {c.r} {c.g} {c.b} {c.a} }}\n", self.indent)
             self.indent -= INDENT_AMOUNT
             _write_with_indent(self.output_file, "}\n", self.indent)
