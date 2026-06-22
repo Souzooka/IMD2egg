@@ -396,7 +396,9 @@ class IMDPrimTransformState(IMDPrim):
     # Represents the transform state
     # (of some data within the model? Of the group containing this?)
     # and the relation between this node and others within the model
-    # 8 - unknown int
+    # 8 - info about billboarding
+    is_billboard: bool
+    is_billboard_axis: bool
     # C - unknown short
     # E - unknown short
     # 10
@@ -418,6 +420,14 @@ class IMDPrimTransformState(IMDPrim):
         pos = f.tell()
 
         prim = cls()
+
+        f.seek(pos + 0x8)
+        prim.is_billboard = bool(struct.unpack("<b", f.read(1))[0] & 0x1)
+        if prim.is_billboard:
+            f.seek(pos + 0x8)
+            prim.is_billboard_axis = bool(struct.unpack("<b", f.read(1))[0] & 0x2)
+        else:
+            prim.is_billboard_axis = False
 
         f.seek(pos + 0x10)
         prim.orientation = Vec4(*struct.unpack("<4f", f.read(4*4)))

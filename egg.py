@@ -160,7 +160,18 @@ class EggGroup:
         pass
 
     def __proc_prim_transform_state(self, prim: IMDPrimTransformState):
-        pass
+        assert self.output_file is not None
+
+        # NOTE: These type strings aren't documented in the egg syntax doc,
+        # but possible strings are "axis", "point_eye", "point_world", and "point" (case-insensitive)
+        # An axis billboard effect can be seen in the Survivor Compass model
+        if prim.is_billboard:
+            axis_type = "Point_eye"
+            if prim.is_billboard_axis:
+                axis_type = "Axis"
+            _write_with_indent(self.output_file, f"<Billboard> {{ {axis_type} }}\n", self.indent)
+
+        # TODO: The actual transformation matrix
     
     def __proc_prim_13(self, prim: IMDPrim0x13):
         pass
