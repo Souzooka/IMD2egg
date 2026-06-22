@@ -262,7 +262,7 @@ class IMDPrim:
             case 0x50:
                 prim_cls = IMDPrim0x50
             case 0x58:
-                prim_cls = IMDPrim0x58
+                prim_cls = IMDPrimDeformableVertexPool
             case 0x60:
                 prim_cls = IMDPrim0x60
             case 0x64:
@@ -286,7 +286,8 @@ class IMDPrimGenericVertexPool(IMDPrim):
     type = 0x100 #special
     # Generic class for vertex pool primitives
     VERTEX_CLASS = Vertex
-    VERTEX_START_OFFSET = 0x60
+    VIF_PACKET_START_OFFSET = 0x10
+    VERTEX_START_OFFSET = 0x50
     has_vertex_normals: bool
     vertices: Sequence[Vertex]
 
@@ -296,16 +297,24 @@ class IMDPrimGenericVertexPool(IMDPrim):
 
         prim = cls()
 
+        vif_pos = pos + cls.VIF_PACKET_START_OFFSET
+
         f.seek(pos + 0xE)
         num_vertices = struct.unpack("<H", f.read(2))[0]
 
-        f.seek(pos + 0x36)
+        # NOTE: Technically, since a pool is a collection of 1 or more VIF packets,
+        # each packet could have a different configuration (such that one part of the pool
+        # uses polygon normals, and another vertex normals, etc.). For the time being it'd be nice
+        # to avoid handling each packet separately, if it's possible/accurate.
+        f.seek(vif_pos + 0x26)
         prim.has_vertex_normals = bool(struct.unpack("<B", f.read(1))[0] & 0x4)
+
+        vertex_size = prim.VERTEX_CLASS.size
 
         prim.vertices = []
         offset = cls.VERTEX_START_OFFSET
         for i in range(num_vertices):
-            vertex_pos = pos + offset + (i * prim.VERTEX_CLASS.size)
+            vertex_pos = vif_pos + offset + (i * vertex_size)
             f.seek(vertex_pos)
 
             f.seek(vertex_pos + 0xF)
@@ -317,7 +326,7 @@ class IMDPrimGenericVertexPool(IMDPrim):
                 # the first two vertices in the new packet as well, as they seem to
                 # just send the last two vertices from the old packet again,
                 # so 0x50 + (0x18 * 2) or 0x80 in total)
-                delta = (prim.VERTEX_START_OFFSET - 0x10) + prim.VERTEX_CLASS.size * 2
+                delta = (prim.VERTEX_START_OFFSET) + vertex_size * 2
                 offset += delta
                 vertex_pos += delta
             f.seek(vertex_pos)
@@ -611,7 +620,7 @@ class Vertex0x40(Vertex):
 class IMDPrimFloatVertexPool(IMDPrimGenericVertexPool):
     type: ClassVar[int] = 0x40
     VERTEX_CLASS = Vertex0x40
-    VERTEX_START_OFFSET = 0x50
+    VERTEX_START_OFFSET = 0x40
 
 class Vertex0x41(Vertex0x40):
     # size = 0x20
@@ -761,16 +770,91 @@ class IMDPrim0x50(IMDPrim):
         f.seek(pos)
 
         return prim
+    
+@dataclass
+class Vertex0x58Base(Vertex0x48):
+    is_connective = False
+    
+class Vertex0x58NonConnective(Vertex0x58Base):
+    size = 0x18
+    is_connective = False
 
-class IMDPrim0x58(IMDPrim):
+class Vertex0x58Connective(Vertex0x58Base):
+    size = 0x28
+    is_connective = True
+    
+
+class IMDPrimDeformableVertexPool(IMDPrim):
     type: ClassVar[int] = 0x58
+    VIF_PACKET_START_OFFSET = 0x30
+    VERTEX_START_OFFSET = 0x50
+    has_vertex_normals: bool
+    vertices: Sequence[Vertex]
+
+    pool_index: int
+    connected_pools: Sequence[int]
 
     @classmethod
-    def from_file(cls, f: BinaryIO):
+    def from_file(cls, f: BinaryIO): # type: ignore # This is a base class so it's fine
         pos = f.tell()
 
         prim = cls()
-        print(f"IMD | WARNING: Encountered unimplemented Prim type {hex(prim.type)}")
+        prim.vertices = []
+        prim.pool_index = -1
+        prim.connected_pools = []
+
+        vif_pos = pos + cls.VIF_PACKET_START_OFFSET
+
+        f.seek(pos + 0xE)
+        num_vertices = struct.unpack("<H", f.read(2))[0]
+        
+
+        # 10; a sign-terminated list of 8 32-bit ints. If a length of 1, indicates the
+        # index of this pool. If a length of >1, then this indicates which pools this pool connects to.
+        f.seek(pos + 0x14)
+        vertex_class = Vertex0x58NonConnective
+        second_pool = struct.unpack("<i", f.read(4))[0]
+        if second_pool != -1:
+            print("IMD | WARNING: Encountered connective 0x58 prim; this is not yet properly supported.")
+            f.seek(pos + 0x10)
+            while (pool := struct.unpack("<i", f.read(4))[0]) != -1:
+                prim.connected_pools.append(pool)
+            vertex_class = Vertex0x58Connective
+        else:
+            f.seek(pos + 0x10)
+            prim.pool_index = struct.unpack("<i", f.read(4))[0]
+            vertex_class = Vertex0x58NonConnective
+
+        # NOTE: Technically, since a pool is a collection of 1 or more VIF packets,
+        # each packet could have a different configuration (such that one part of the pool
+        # uses polygon normals, and another vertex normals, etc.). For the time being it'd be nice
+        # to avoid handling each packet separately, if it's possible/accurate.
+        f.seek(vif_pos + 0x36)
+        prim.has_vertex_normals = bool(struct.unpack("<B", f.read(1))[0] & 0x4)
+
+        f.seek(pos + 0x14)
+        vertex_size = vertex_class.size
+
+        offset = cls.VERTEX_START_OFFSET
+        for i in range(num_vertices):
+            vertex_pos = vif_pos + offset + (i * vertex_size)
+            f.seek(vertex_pos)
+
+            f.seek(vertex_pos + 0xF)
+            if struct.unpack("<B", f.read(1))[0] == 0x17:
+                # It appears this marks the end of a GIF packet(?)
+                # we can skip over the start of the next packet and
+                # continue reading vertex data
+                # (To do this we skip 0x50; but, we also want to skip over
+                # the first two vertices in the new packet as well, as they seem to
+                # just send the last two vertices from the old packet again,
+                # so 0x50 + (0x18 * 2) or 0x80 in total)
+                delta = (prim.VERTEX_START_OFFSET) + vertex_size * 2
+                offset += delta
+                vertex_pos += delta
+            f.seek(vertex_pos)
+
+            prim.vertices.append(vertex_class.from_file(f))
         
         f.seek(pos)
 

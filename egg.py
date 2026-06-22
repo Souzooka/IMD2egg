@@ -16,6 +16,7 @@ from imd import (
     #IMDPrimFloatVertexPoolWithRGBA, # 41
     #IMDPrimShortVertexPool, # 48
     #IMDPrimShortVertexPoolWithRGBA, # 49
+    IMDPrimDeformableVertexPool, # 58
 )
 from util import Color4, Vec4
 
@@ -135,6 +136,10 @@ class EggGroup:
                 case 0x40 | 0x41 | 0x48 | 0x49:
                     assert isinstance(prim, IMDPrimGenericVertexPool)
                     self.__proc_prim_vertex_pool(prim)
+                case 0x58:
+                    assert isinstance(prim, IMDPrimDeformableVertexPool)
+                    # TODO: We might want a separate processing function for this one
+                    self.__proc_prim_vertex_pool(prim)
                 case _:
                     print(f"EggGroup: Unknown prim type {hex(prim.type)}")
 
@@ -161,7 +166,7 @@ class EggGroup:
     def __proc_prim_texture(self, prim: IMDPrimTexture):
         self.texture_id = prim.texture_id
 
-    def __proc_prim_vertex_pool(self, prim: IMDPrimGenericVertexPool):
+    def __proc_prim_vertex_pool(self, prim: IMDPrimGenericVertexPool | IMDPrimDeformableVertexPool):
         assert self.output_file is not None
         pool_name = f"{self.name}_{self.__num_vertex_pools}.verts"
         _write_with_indent(self.output_file, f"<VertexPool> {pool_name} {{\n", self.indent)
@@ -223,4 +228,6 @@ class EggGroup:
         # I'm not sure exactly if this affects other properties such as vertex color or not at this time.
         # If we don't clear the texture ID, then triangles such as Geo's ring won't properly render
         # as they are erroneously using his eye texture.
-        self.texture_id = -1
+        # NOTE: Prim 0x58 seems to keep the last-used texture, sigh
+        if not isinstance(prim, IMDPrimDeformableVertexPool):
+            self.texture_id = -1
