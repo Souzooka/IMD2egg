@@ -12,6 +12,7 @@ from imd import (
     IMDPrim0x13, # 13
     IMDPrimVertexColor, # 20
     IMDPrimTexture, # 21
+    IMDPrimTextureAnimated, # 23
     #IMDPrimFloatVertexPool, # 40
     #IMDPrimFloatVertexPoolWithRGBA, # 41
     #IMDPrimShortVertexPool, # 48
@@ -132,6 +133,10 @@ class EggGroup:
                     self.__proc_prim_vertex_color(prim)
                 case 0x21:
                     assert isinstance(prim, IMDPrimTexture)
+                    self.__proc_prim_texture(prim)
+                case 0x23:
+                    print("EGG | Warning: Implementing animated texture as static")
+                    assert isinstance(prim, IMDPrimTextureAnimated)
                     self.__proc_prim_texture(prim)
                 case 0x40 | 0x41 | 0x48 | 0x49:
                     assert isinstance(prim, IMDPrimGenericVertexPool)

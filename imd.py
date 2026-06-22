@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import struct
 from dataclasses import dataclass, field
-from typing import BinaryIO, ClassVar, Sequence, cast
+from typing import BinaryIO, ClassVar, Sequence, Type, cast
 
 from util import Color4, Vec4
 
@@ -29,30 +29,30 @@ class IMD:
         
         return imd
     
-    def __get_all_prims_of_type(self, prim_type: int) -> Sequence[IMDPrim]:
+    def __get_all_prims_of_type(self, prim_type: Type[IMDPrim]) -> Sequence[IMDPrim]:
         prims: list[IMDPrim] = []
 
         for obj in self.objects:
             obj_prims = obj.get_prims()
             for prim in obj_prims:
-                if prim.type == prim_type:
+                if isinstance(prim, prim_type):
                     prims.append(prim)
 
                 prim_prims = prim.get_prims()
                 for prim in prim_prims:
-                    if prim.type == prim_type:
+                    if isinstance(prim, prim_type):
                         prims.append(prim)
         
         return prims
 
     def get_all_textures(self) -> Sequence[IMDPrimTexture]:
-        result = self.__get_all_prims_of_type(IMDPrimTexture.type)
+        result = self.__get_all_prims_of_type(IMDPrimTexture)
         return cast("Sequence[IMDPrimTexture]", result)
     
     def get_all_groups(self) -> Sequence[IMDPrimGroup]:
         # TODO: this doesn't respect nesting -- but maybe we could just arrange a
         # dict of {parent: children} here if all groups have a transform state with a parent node ID?
-        result = self.__get_all_prims_of_type(IMDPrimGroup.type)
+        result = self.__get_all_prims_of_type(IMDPrimGroup)
         return cast("Sequence[IMDPrimGroup]", result)
     
 class IMDHeader:
@@ -238,7 +238,7 @@ class IMDPrim:
             case 0x22:
                 prim_cls = IMDPrim0x22
             case 0x23:
-                prim_cls = IMDPrim0x23
+                prim_cls = IMDPrimTextureAnimated
             case 0x24:
                 prim_cls = IMDPrim0x24
             case 0x25:
@@ -511,19 +511,15 @@ class IMDPrim0x22(IMDPrim):
 
         return prim
  
-class IMDPrim0x23(IMDPrim):
+class IMDPrimTextureAnimated(IMDPrimTexture):
     type: ClassVar[int] = 0x23
+    # An animated texture of some sort,
+    # presumably utilizing UV scroll.
 
     @classmethod
     def from_file(cls, f: BinaryIO):
-        pos = f.tell()
-
-        prim = cls()
-        print(f"IMD | WARNING: Encountered unimplemented Prim type {hex(prim.type)}")
-        
-        f.seek(pos)
-
-        return prim
+        print("IMD | WARNING: Animated texture (0x23) partially implemented as static texture (0x21).")
+        return super().from_file(f)
     
 class IMDPrim0x24(IMDPrim):
     type: ClassVar[int] = 0x24
