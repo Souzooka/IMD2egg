@@ -692,10 +692,13 @@ class Vertex0x48(Vertex):
         # 10 texture U (short)
         # 12 texture V (short)
         # NOTE: 14 and 16 seem to be possibly be divisors for U and V,
-        # these are probably 0x1000 but we should probably read these too.
+        # so we'll read them instead of assuming divisor is 0x1000 (which it usually is)
+        f.seek(pos + 0x14)
+        u_div = struct.unpack("<h", f.read(2))[0]
+        v_div = struct.unpack("<h", f.read(2))[0]
         f.seek(pos + 0x10)
-        vertex.u = struct.unpack("<h", f.read(2))[0] / 0x1000
-        vertex.v = 1.0 - struct.unpack("<h", f.read(2))[0] / 0x1000
+        vertex.u = struct.unpack("<h", f.read(2))[0] / u_div
+        vertex.v = 1.0 - struct.unpack("<h", f.read(2))[0] / v_div
 
         f.seek(pos)
         return vertex
