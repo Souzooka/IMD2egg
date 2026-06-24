@@ -222,7 +222,8 @@ class EggGroup:
         _write_with_indent(self.output_file, f"<RotX> {{ {rx * 57.29578} }}\n", self.indent)
         _write_with_indent(self.output_file, f"<RotY> {{ {ry * 57.29578} }}\n", self.indent)
         _write_with_indent(self.output_file, f"<RotZ> {{ {rz * 57.29578} }}\n", self.indent)
-        _write_with_indent(self.output_file, f"<Scale> {{ {scx} {scy} {scz} }}\n", self.indent)
+        # FIXME: The scale transform read from IMD seems to be incorrect
+        #_write_with_indent(self.output_file, f"<Scale> {{ {scx} {scy} {scz} }}\n", self.indent)
         self.indent -= 2
         _write_with_indent(self.output_file, f"}}\n", self.indent)
     
