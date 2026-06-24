@@ -5,9 +5,10 @@ from typing import TextIO
 
 from imd import (
     IMD, 
+    IMDObjModel, # 10
     IMDPrimGenericVertexPool,
-    IMDPrimGroup, # 01
-    IMDPrim0x2, # 02
+    IMDPrimModelGroup, # 01
+    IMDPrimModelTransformStateList, # 02
     IMDPrimTransformState, # 10
     IMDPrim0x13, # 13
     IMDPrimVertexColor, # 20
@@ -39,15 +40,23 @@ class Egg:
         # coordinate system
         output_file.write(f"<CoordinateSystem> {{ {COORDINATE_SYSTEM} }}\n\n")
 
-        # Write textures
-        textures = imd.get_all_textures()
-        for texture in textures:
-            Egg._write_texture(output_file, texture)
+        # Just process the first model object for now
+        models = imd.get_all_objects_of_type(IMDObjModel)
+        assert len(models) > 0
+        Egg._proc_model(output_file, models[0])
+
+    @staticmethod
+    def _proc_model(output_file: TextIO, model: IMDObjModel):
+        # Pre-process textures
+        # TODO: Abstract this a little bit
+        for prim in model.get_prims():
+            for prim in prim.get_prims():
+                if isinstance(prim, IMDPrimTexture):
+                    Egg._write_texture(output_file, prim)
 
         # Write groups
-        for i, group in enumerate(imd.get_all_groups()):
-            Egg._write_group(output_file, group, str(i))
-        
+        for i, tstate in enumerate(model.get_top_level_nodes()):
+            Egg._write_group(output_file, tstate, str(i))
 
     @staticmethod
     def _write_texture(output_file: TextIO, texture: IMDPrimTexture, indent: int = 0):
@@ -66,8 +75,8 @@ class Egg:
         output_file.write("\n\n")
 
     @staticmethod
-    def _write_group(output_file: TextIO, group: IMDPrimGroup, group_name: str, indent: int = 0):
-        EggGroup(group, group_name).write(output_file, indent)
+    def _write_group(output_file: TextIO, tstate: IMDPrimTransformState, group_name: str, indent: int = 0):
+        EggGroup(tstate, group_name).write(output_file, indent)
 
     @staticmethod
     def convert_imd_coordinates(vec: Vec4):
@@ -84,7 +93,7 @@ class EggGroup:
     # user properties
     name: str
     # internal
-    prim_group: IMDPrimGroup
+    transform_state: IMDPrimTransformState
     indent: int
     output_file: TextIO | None
     __num_vertex_pools: int # bit of a hack just to ensure unique vertex pool names for now
@@ -96,9 +105,9 @@ class EggGroup:
     parent_group_id: int
     children: list[EggGroup]
 
-    def __init__(self, prim_group: IMDPrimGroup, name: str) -> None:
+    def __init__(self, tstate: IMDPrimTransformState, name: str) -> None:
         self.name = name
-        self.prim_group = prim_group
+        self.transform_state = tstate
         self.indent = 0
         self.output_file = None
         self.__num_vertex_pools = 0
@@ -111,20 +120,52 @@ class EggGroup:
         self.indent = indent
         self.output_file = output_file
 
+        # For each transformation state, we have to write the groups associated with the state,
+        # and its children. Since a transform state can have multiple groups which utilize it,
+        # We'll keep this simple and just have lists of PandaNodes (with the states) and the
+        # geometry under those nodes, e.g.:
+        #
+        #       P
+        #      / \
+        # G-G-G   P
+        #        / \
+        #     G-G   P 
+        #
+        # where P is a transformation state, and G is a node with geometry.
+
+        # So, first, write the panda node for this state
         _write_with_indent(output_file, f"<Group> {self.name} {{\n", self.indent)
         self.indent += INDENT_AMOUNT
+        # Insert our transformation state at the top
+        self.__proc_prim_transform_state(self.transform_state)
+        # Now write the groups with geometry here
+        for i, group in enumerate(self.transform_state.groups):
+            self.__write_group(output_file, group, f"{self.name}_geom_{i}")
+        # Now write our children
+        for i, tstate in enumerate(self.transform_state.children):
+            EggGroup(tstate, f"{self.name}_{i}").write(output_file, self.indent)
 
-        for prim in self.prim_group.get_prims():
+        # and that's a wrap (hopefully)
+        self.indent -= INDENT_AMOUNT
+        _write_with_indent(output_file, "}\n", self.indent)
+
+        self.output_file = None
+
+    def __write_group(self, output_file: TextIO, prim_group: IMDPrimModelGroup, name: str):
+        _write_with_indent(output_file, f"<Group> {name} {{\n", self.indent)
+        self.indent += INDENT_AMOUNT
+
+        for prim in prim_group.get_prims():
             match prim.type:
                 case 0x01:
-                    assert isinstance(prim, IMDPrimGroup)
+                    assert isinstance(prim, IMDPrimModelGroup)
                     self.__proc_prim_group(prim)
                 case 0x02:
-                    assert isinstance(prim, IMDPrim0x2)
+                    assert isinstance(prim, IMDPrimModelTransformStateList)
                     self.__proc_prim_02(prim)
                 case 0x10:
                     assert isinstance(prim, IMDPrimTransformState)
-                    self.__proc_prim_transform_state(prim)
+                    pass # Should already be handled
                 case 0x13:
                     assert isinstance(prim, IMDPrim0x13)
                     self.__proc_prim_13(prim)
@@ -149,18 +190,18 @@ class EggGroup:
                     print(f"EggGroup: Unknown prim type {hex(prim.type)}")
 
         self.indent -= INDENT_AMOUNT
-        _write_with_indent(output_file, "}\n", indent)
+        _write_with_indent(output_file, "}\n", self.indent)
 
-        self.output_file = None
-
-    def __proc_prim_group(self, prim_group: IMDPrimGroup):
+    def __proc_prim_group(self, prim_group: IMDPrimModelGroup):
         raise RuntimeError("Nested PrimGroup unsupported")
 
-    def __proc_prim_02(self, prim: IMDPrim0x2):
+    def __proc_prim_02(self, prim: IMDPrimModelTransformStateList):
         pass
 
-    def __proc_prim_transform_state(self, prim: IMDPrimTransformState):
+    def __proc_prim_transform_state(self, prim: IMDPrimTransformState | None):
         assert self.output_file is not None
+        if prim is None:
+            return
 
         # NOTE: These type strings aren't documented in the egg syntax doc,
         # but possible strings are "axis", "point_eye", "point_world", and "point" (case-insensitive)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import struct
 from dataclasses import dataclass, field
-from typing import BinaryIO, ClassVar, Sequence, Type, cast
+from typing import BinaryIO, ClassVar, Sequence, Type, TypeVar, cast
 
 from util import Color4, Vec4
 
@@ -45,15 +45,19 @@ class IMD:
         
         return prims
 
+    T = TypeVar("T")
+    def get_all_objects_of_type(self, obj_type: Type[T]) -> Sequence[T]:
+        return [obj for obj in self.objects if isinstance(obj, obj_type)]
+
     def get_all_textures(self) -> Sequence[IMDPrimTexture]:
         result = self.__get_all_prims_of_type(IMDPrimTexture)
         return cast("Sequence[IMDPrimTexture]", result)
     
-    def get_all_groups(self) -> Sequence[IMDPrimGroup]:
+    def get_all_groups(self) -> Sequence[IMDPrimModelGroup]:
         # TODO: this doesn't respect nesting -- but maybe we could just arrange a
         # dict of {parent: children} here if all groups have a transform state with a parent node ID?
-        result = self.__get_all_prims_of_type(IMDPrimGroup)
-        return cast("Sequence[IMDPrimGroup]", result)
+        result = self.__get_all_prims_of_type(IMDPrimModelGroup)
+        return cast(Sequence[IMDPrimModelGroup], result)
     
 class IMDHeader:
     # bytes 0:3 should be "IMD "
@@ -119,7 +123,7 @@ class IMDObj:
         obj_cls = None
         match obj_type:
             case 0x10:
-                obj_cls = IMDObj0x10
+                obj_cls = IMDObjModel
             case 0x20:
                 obj_cls = IMDObj0x20
             case _:
@@ -133,16 +137,19 @@ class IMDObj:
     def get_prims(self) -> list[IMDPrim]:
         return []
 
-class IMDObj0x10(IMDObj):
+class IMDObjModel(IMDObj):
     type: ClassVar[int] = 0x10
     # B0; null-terminated void*[]
     prims: list[IMDPrim]
+
+    _top_level_nodes: list[IMDPrimTransformState]
 
     @classmethod
     def from_file(cls, f: BinaryIO):
         pos = f.tell()
 
         obj = cls()
+        obj._top_level_nodes = []
 
         f.seek(pos + 0xB0)
         p_prims: list[int] = []
@@ -155,10 +162,52 @@ class IMDObj0x10(IMDObj):
             obj.prims.append(IMDPrim.from_file(f))
         f.seek(pos)
 
+        # Form parent/children node relationships
+        obj._construct_scene_graph()
         return obj
-    
+
+    def _construct_scene_graph(self):
+        # Start by first gathering all transform states
+        transform_states: dict[int, IMDPrimTransformState] = {}
+        for prim in self.get_prims():
+            for prim_prim in prim.get_prims():
+                if isinstance(prim_prim, IMDPrimTransformState):
+                    index = prim_prim.node_index
+                    transform_states[index] = prim_prim
+
+        # Now using we associate each model group with a state,
+        # and also form the parent/child relationships in the states
+        for prim in self.get_prims():
+            group = prim if isinstance(prim, IMDPrimModelGroup) else None
+            for prim_prim in prim.get_prims():
+                if isinstance(prim_prim, IMDPrimTransformState):
+                    transform_state = prim_prim
+                    node_index = transform_state.node_index
+                    
+                    # Assign the associated groups to this transform state
+                    child_state = transform_states[node_index]
+                    if group is not None:
+                        child_state.groups.append(group)
+
+                    # Create the parent/child relationship, if this node has a parent
+                    parent_node_index = transform_state.parent_node_index
+                    if parent_node_index == -1:
+                        # This transformation state has no parent
+                        continue
+                    assert parent_node_index in transform_states
+
+                    parent_state = transform_states[parent_node_index]
+                    child_state.parent = parent_state
+                    parent_state.children.append(child_state)
+
+        self._top_level_nodes = [tstate for tstate in transform_states.values() if tstate.parent is None]
+        pass
+
     def get_prims(self) -> list[IMDPrim]:
         return self.prims
+
+    def get_top_level_nodes(self):
+        return self._top_level_nodes
     
 class IMDObj0x20(IMDObj):
     type: ClassVar[int] = 0x20
@@ -217,16 +266,16 @@ class IMDPrim:
     type: ClassVar[int] = 0
 
     @classmethod
-    def from_file(cls, f: BinaryIO):
+    def from_file(cls, f: BinaryIO) -> IMDPrim:
         pos = f.tell()
         prim_type: int = struct.unpack("<I", f.read(4))[0]
         
         prim_cls = None
         match prim_type:
             case 0x01:
-                prim_cls = IMDPrimGroup
+                prim_cls = IMDPrimModelGroup
             case 0x02:
-                prim_cls = IMDPrim0x2
+                prim_cls = IMDPrimModelTransformStateList
             case 0x10:
                 prim_cls = IMDPrimTransformState
             case 0x13:
@@ -337,7 +386,7 @@ class IMDPrimGenericVertexPool(IMDPrim):
 
         return prim
 
-class IMDPrimGroup(IMDPrim):
+class IMDPrimModelGroup(IMDPrim):
     type: ClassVar[int] = 1
     # Seems to just be a list of primitives;
     # perhaps some sort of grouping.
@@ -376,19 +425,39 @@ class IMDPrimGroup(IMDPrim):
     def get_prims(self) -> Sequence[IMDPrim]:
         return self.prims
     
-class IMDPrim0x2(IMDPrim):
+class IMDPrimModelTransformStateList(IMDPrim):
+    # TODO: This primitive is like an IMDPrimModelGroup, but only contains transformation states!
+    # These states will essentially be empty nodes, but will provide some sort of additional
+    # transformation for children; we'll need to process these in order to properly establish the
+    # parent/child relationship of groups.
     type: ClassVar[int] = 0x2
+    # 10; null-terminated prim*[]
+    prims: list[IMDPrimTransformState]
 
     @classmethod
     def from_file(cls, f: BinaryIO):
         pos = f.tell()
 
         prim = cls()
-        print(f"IMD | WARNING: Encountered unimplemented Prim type {hex(prim.type)}")
+
+        f.seek(pos + 0x10)
+        p_prims: list[int] = []
+        while (ptr := struct.unpack("<I", f.read(4))[0]) != 0:
+            p_prims.append(ptr)
+
+        prim.prims = []
+        for ptr in p_prims:
+            f.seek(ptr)
+            new_prim = IMDPrim.from_file(f)
+            assert isinstance(new_prim, IMDPrimTransformState)
+            prim.prims.append(new_prim)
         
         f.seek(pos)
 
         return prim
+    
+    def get_prims(self) -> Sequence[IMDPrimTransformState]:
+        return self.prims
 
 class IMDPrimTransformState(IMDPrim):
     type: ClassVar[int] = 0x10
@@ -415,11 +484,19 @@ class IMDPrimTransformState(IMDPrim):
     # Transformations are applied relative to the parent
     parent_node_index: int
 
+    # internal properties
+    parent: IMDPrimTransformState | None
+    children: list[IMDPrimTransformState]
+    groups: list[IMDPrimModelGroup] # Groups which utilize this transform state
+
     @classmethod
     def from_file(cls, f: BinaryIO):
         pos = f.tell()
 
         prim = cls()
+        prim.parent = None
+        prim.children = []
+        prim.groups = []
 
         f.seek(pos + 0x8)
         prim.is_billboard = bool(struct.unpack("<b", f.read(1))[0] & 0x1)
