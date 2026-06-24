@@ -212,7 +212,19 @@ class EggGroup:
                 axis_type = "Axis"
             _write_with_indent(self.output_file, f"<Billboard> {{ {axis_type} }}\n", self.indent)
 
-        # TODO: The actual transformation matrix
+        px, py, pz, _ = prim.position
+        rx, ry, rz, _ = prim.orientation
+        scx, scy, scz, _ = prim.scale
+        _write_with_indent(self.output_file, f"<Transform> {{\n", self.indent)
+        self.indent += 2
+        _write_with_indent(self.output_file, f"<Translate> {{ {px} {py} {pz} }}\n", self.indent)
+        # TEMP: convert to degrees properly lmao
+        _write_with_indent(self.output_file, f"<RotX> {{ {rx * 57.29578} }}\n", self.indent)
+        _write_with_indent(self.output_file, f"<RotY> {{ {ry * 57.29578} }}\n", self.indent)
+        _write_with_indent(self.output_file, f"<RotZ> {{ {rz * 57.29578} }}\n", self.indent)
+        _write_with_indent(self.output_file, f"<Scale> {{ {scx} {scy} {scz} }}\n", self.indent)
+        self.indent -= 2
+        _write_with_indent(self.output_file, f"}}\n", self.indent)
     
     def __proc_prim_13(self, prim: IMDPrim0x13):
         pass

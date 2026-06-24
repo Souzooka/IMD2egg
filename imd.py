@@ -757,12 +757,12 @@ class Vertex0x48(Vertex):
 
         f.seek(pos + 0xE)
         # TODO: Some sort of scale value, guessing at this
-        #scale = struct.unpack("<h", f.read(2))[0] / 0x1000
+        scale = struct.unpack("<h", f.read(2))[0] / 0x1000
 
         f.seek(pos + 0x0)
         # 0..5; packed 3 signed 16-bit Vertex position
         # NOTE: This scale is just arbitrary
-        vertex.position = Vec4(*(c / 0x40 for c in struct.unpack("<3h", f.read(2*3))))
+        vertex.position = Vec4(*(c * scale for c in struct.unpack("<3h", f.read(2*3))))
 
         # 6 (short); The vertex order of the polygon this vertex is the last vertex for.
         # Can be 1 of three possible value ranges:
