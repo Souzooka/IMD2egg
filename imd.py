@@ -757,7 +757,7 @@ class Vertex0x48(Vertex):
 
         f.seek(pos + 0xE)
         # TODO: Some sort of scale value, guessing at this
-        scale = struct.unpack("<h", f.read(2))[0] / 0x1000
+        scale = struct.unpack("<h", f.read(2))[0] / 0x8000
 
         f.seek(pos + 0x0)
         # 0..5; packed 3 signed 16-bit Vertex position
