@@ -278,6 +278,8 @@ class IMDPrim:
                 prim_cls = IMDPrimModelTransformStateList
             case 0x10:
                 prim_cls = IMDPrimTransformState
+            case 0x12:
+                prim_cls = IMDPrim0x12
             case 0x13:
                 prim_cls = IMDPrim0x13
             case 0x20:
@@ -449,6 +451,12 @@ class IMDPrimModelTransformStateList(IMDPrim):
         for ptr in p_prims:
             f.seek(ptr)
             new_prim = IMDPrim.from_file(f)
+
+            # Apparently we can get prim 0x12 in this list
+            if isinstance(new_prim, IMDPrim0x12):
+                print("IMD | WARNING: Encountered prim 0x12 in transform state list; ignoring")
+                continue
+
             assert isinstance(new_prim, IMDPrimTransformState)
             prim.prims.append(new_prim)
         
@@ -520,6 +528,22 @@ class IMDPrimTransformState(IMDPrim):
 
         f.seek(pos + 0x64)
         prim.parent_node_index = struct.unpack("<i", f.read(4))[0]
+        
+        f.seek(pos)
+
+        return prim
+    
+class IMDPrim0x12(IMDPrim):
+    type: ClassVar[int] = 0x12
+    # size = 0x100
+    # Seems to be potentially some sort of transform state that references two other transform states as well?
+
+    @classmethod
+    def from_file(cls, f: BinaryIO):
+        pos = f.tell()
+
+        prim = cls()
+        print(f"IMD | WARNING: Encountered unimplemented Prim type {hex(prim.type)}")
         
         f.seek(pos)
 

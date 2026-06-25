@@ -212,9 +212,9 @@ class EggGroup:
                 axis_type = "Axis"
             _write_with_indent(self.output_file, f"<Billboard> {{ {axis_type} }}\n", self.indent)
 
-        px, py, pz, _ = prim.position
-        rx, ry, rz, _ = prim.orientation
-        scx, scy, scz, _ = prim.scale
+        px, py, pz, _ = Egg.convert_imd_coordinates(prim.position)
+        rx, ry, rz, _ = Egg.convert_imd_coordinates(prim.orientation)
+        scx, scy, scz, _ = Egg.convert_imd_coordinates(prim.scale)
         _write_with_indent(self.output_file, f"<Transform> {{\n", self.indent)
         self.indent += 2
         _write_with_indent(self.output_file, f"<Translate> {{ {px} {py} {pz} }}\n", self.indent)
